@@ -50,7 +50,7 @@ Letzter Commit auf `feature/watson-tui`: `02bfbbf` (Task 14).
 `.github/workflows/ci.yml` triggert nur auf `push: main` und `pull_request` — auf `feature/watson-tui` läuft also nichts. Verifikation braucht **einen PR** (`gh pr create --base main`, dann `gh run watch --exit-status`) oder den End-Merge auf `main`. Bis dahin bleibt SNQ-588 in Progress.
 
 - Lokal ist das Gate grün: `go build ./... && go test ./... && go vet ./... && golangci-lint run ./...` (0 Findings).
-- `.golangci.yml` (v2-Format) aktiviert staticcheck mit `all` minus `ST1005` (deutsche Fehlertexte sind UI-Text, Substantive groß). `all` ist strenger als der golangci-lint-Default — deshalb kamen ST1000/QF1012 dazu und sind in `93d2eff` gefixt (Package-Docs, `fmt.Fprintf` statt `WriteString(fmt.Sprintf(...))`).
+- `.golangci.yml` (v2-Format) aktiviert staticcheck mit `all` minus `ST1005` (deutsche Fehlertexte sind UI-Text, Substantive groß). Weil `all` auch künftige Checks einschaltet, ist die Lint-Version im Workflow auf `v2.12.2` gepinnt (lokal verifizierte Version) — beim Hochziehen `golangci-lint run ./...` lokal gegenläufig prüfen. `all` ist strenger als der golangci-lint-Default — deshalb kamen ST1000/QF1012 dazu und sind in `93d2eff` gefixt (Package-Docs, `fmt.Fprintf` statt `WriteString(fmt.Sprintf(...))`).
 - Runner-Check: `gh api repos/schnaq/watson-tui/actions/runners` liefert 0 (repo-level); Org-Ebene ist mit dem aktuellen Token nicht abfragbar (403, braucht `admin:org`). Laut User-Vorgabe existieren die Runner auf Org-Ebene — deshalb nicht blockiert.
 - Runner: `runs-on: self-hosted` — matcht **gimli (macOS)** oder **OpenSuse (Linux)**. Workflows OS-agnostisch halten (actions/setup-go, kein brew in CI).
 

@@ -26,4 +26,6 @@ jobs:
           go-version: 'stable'
       - uses: golangci/golangci-lint-action@v8
         with:
-          version: latest
+          # Pinned: .golangci.yml enables staticcheck's full check set, so a
+          # newer release could redden the gate without a code change.
+          version: v2.12.2
