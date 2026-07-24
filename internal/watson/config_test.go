@@ -26,3 +26,14 @@ func TestParseConfigDefaults(t *testing.T) {
 		}
 	}
 }
+
+func TestParseConfigCorrupt(t *testing.T) {
+	// An unterminated section header is malformed INI, so ini.Load must fail.
+	cfg, err := ParseConfig([]byte("[unterminated\n"))
+	if err == nil {
+		t.Fatal("expected error for malformed ini, got nil")
+	}
+	if cfg.WeekStart != time.Monday {
+		t.Errorf("got %v, want Monday (defaults) on parse error", cfg.WeekStart)
+	}
+}

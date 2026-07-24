@@ -12,6 +12,8 @@ type Config struct {
 	WeekStart time.Weekday
 }
 
+// DefaultConfig returns the Config used when no config file is present or
+// parsing fails; WeekStart defaults to time.Monday.
 func DefaultConfig() Config {
 	return Config{WeekStart: time.Monday}
 }
