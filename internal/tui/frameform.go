@@ -158,7 +158,7 @@ func (m formModel) view() string {
 		if i == m.focus {
 			cursor = "> "
 		}
-		b.WriteString(fmt.Sprintf("%s%s %s\n", cursor, labels[i], m.inputs[i].View()))
+		fmt.Fprintf(&b, "%s%s %s\n", cursor, labels[i], m.inputs[i].View())
 	}
 	if m.errMsg != "" {
 		b.WriteString("\n" + styleError.Render(m.errMsg))

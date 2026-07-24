@@ -1,3 +1,5 @@
+// Package watson reads and writes Watson's data directory (frames, state,
+// config) byte-compatibly, so a Watson installation stays interchangeable.
 package watson
 
 import (

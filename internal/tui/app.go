@@ -1,3 +1,5 @@
+// Package tui implements the Bubble Tea user interface: frame list, form,
+// report, billing overview and the live timer.
 package tui
 
 import (

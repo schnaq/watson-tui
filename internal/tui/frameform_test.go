@@ -115,8 +115,8 @@ func TestOverlapWarnsThenSaves(t *testing.T) {
 	store := watson.NewStore(t.TempDir())
 	now := time.Now()
 	if _, err := store.Add(watson.Frame{
-		Start: time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local),
-		Stop:  time.Date(2026, 7, 20, 10, 0, 0, 0, time.Local),
+		Start:   time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local),
+		Stop:    time.Date(2026, 7, 20, 10, 0, 0, 0, time.Local),
 		Project: "bestehend", Tags: []string{},
 	}, now); err != nil {
 		t.Fatal(err)

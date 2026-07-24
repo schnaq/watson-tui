@@ -85,18 +85,18 @@ func overviewView(frames []watson.Frame, weekStart time.Weekday, now time.Time) 
 	rows, totals := buildOverview(frames, cols, weekStart)
 	var b strings.Builder
 	b.WriteString(styleTitle.Render("Übersicht — Summen pro Projekt") + "\n\n")
-	b.WriteString(fmt.Sprintf("%-24s", "Projekt"))
+	fmt.Fprintf(&b, "%-24s", "Projekt")
 	for _, c := range cols {
-		b.WriteString(fmt.Sprintf(" %13s", c.title))
+		fmt.Fprintf(&b, " %13s", c.title)
 	}
 	b.WriteString("\n\n")
 	if len(rows) == 0 {
 		b.WriteString(styleDim.Render("keine Frames vorhanden") + "\n")
 	}
 	for _, r := range rows {
-		b.WriteString(fmt.Sprintf("%-24s", truncate(r.project, 24)))
+		fmt.Fprintf(&b, "%-24s", truncate(r.project, 24))
 		for _, d := range r.cells {
-			b.WriteString(fmt.Sprintf(" %13s", cellDuration(d)))
+			fmt.Fprintf(&b, " %13s", cellDuration(d))
 		}
 		b.WriteByte('\n')
 	}

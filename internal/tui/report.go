@@ -89,7 +89,7 @@ func (m reportModel) view(frames []watson.Frame, weekStart time.Weekday) string 
 		b.WriteString(styleDim.Render("keine Frames im Zeitraum") + "\n")
 	}
 	for _, l := range lines {
-		b.WriteString(fmt.Sprintf("%-32s %10s\n", truncate(l.project, 32), formatDuration(l.total)))
+		fmt.Fprintf(&b, "%-32s %10s\n", truncate(l.project, 32), formatDuration(l.total))
 		for _, tl := range l.tags {
 			b.WriteString(styleDim.Render(fmt.Sprintf("  [%s]", tl.tag)) +
 				fmt.Sprintf("%*s\n", 42-len("  []")-len([]rune(tl.tag)), formatDuration(tl.d)))
