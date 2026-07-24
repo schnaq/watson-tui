@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/schnaq/watson-tui/internal/watson"
 )
@@ -30,6 +31,8 @@ type App struct {
 	frames []watson.Frame
 	state  *watson.State
 
+	list listModel
+
 	mode     mode
 	now      time.Time
 	errMsg   string // transient, shown in status bar, cleared on next key
@@ -39,7 +42,10 @@ type App struct {
 }
 
 func NewApp(store *watson.Store, version string) *App {
-	return &App{store: store, version: version, mode: modeList, now: time.Now(), width: 80, height: 24}
+	return &App{
+		store: store, version: version, mode: modeList, now: time.Now(),
+		width: 80, height: 24, list: newListModel(time.Now()),
+	}
 }
 
 func (a *App) Init() tea.Cmd {
@@ -63,6 +69,7 @@ func (a *App) reload() {
 	}
 	a.frames = frames
 	a.state = state
+	a.list.refresh(a.frames, a.cfg.WeekStart)
 }
 
 func (a *App) fatal(msg string) {
@@ -98,18 +105,84 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 // updateList handles keys in the frame list view. Later tasks extend this.
 func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if a.list.filtering {
+		switch msg.String() {
+		case "enter":
+			a.list.filtering = false
+			a.list.filter = a.list.filterInput.Value()
+		case "esc":
+			a.list.filtering = false
+			a.list.filterInput.SetValue("")
+			a.list.filter = ""
+		default:
+			var cmd tea.Cmd
+			a.list.filterInput, cmd = a.list.filterInput.Update(msg)
+			a.list.filter = a.list.filterInput.Value()
+			a.list.refresh(a.frames, a.cfg.WeekStart)
+			return a, cmd
+		}
+		a.list.refresh(a.frames, a.cfg.WeekStart)
+		return a, nil
+	}
 	switch msg.String() {
 	case "q":
 		return a, tea.Quit
 	case "?":
 		a.mode = modeHelp
+	case "j", "down":
+		a.list.move(+1)
+	case "k", "up":
+		a.list.move(-1)
+	case "g":
+		a.list.cursor = firstFrameRow(a.list.rows)
+	case "G":
+		if i := nextFrameRow(a.list.rows, len(a.list.rows), -1); i < len(a.list.rows) {
+			a.list.cursor = i
+		}
+	case "/":
+		a.list.filtering = true
+		a.list.filterInput.Focus()
+		return a, textinput.Blink
+	case "[":
+		a.list.per = a.list.per.shift(a.cfg.WeekStart, -1)
+		a.list.refresh(a.frames, a.cfg.WeekStart)
+	case "]":
+		a.list.per = a.list.per.shift(a.cfg.WeekStart, +1)
+		a.list.refresh(a.frames, a.cfg.WeekStart)
+	case "t":
+		a.setPeriodUnit(unitDay)
+	case "w":
+		a.setPeriodUnit(unitWeek)
+	case "m":
+		a.setPeriodUnit(unitMonth)
+	case "a":
+		a.setPeriodUnit(unitAll)
 	}
 	return a, nil
 }
 
+func (a *App) setPeriodUnit(u periodUnit) {
+	a.list.per = period{unit: u, ref: time.Now()}
+	a.list.refresh(a.frames, a.cfg.WeekStart)
+}
+
 // statusLeft is the view-specific left segment of the status bar.
-// Task 9 extends this with period, count and filter info.
-func (a *App) statusLeft() string { return "" }
+func (a *App) statusLeft() string {
+	n := 0
+	for _, r := range a.list.rows {
+		if !r.isHeader {
+			n++
+		}
+	}
+	left := fmt.Sprintf("%s · %d Frames", a.list.per.label(a.cfg.WeekStart), n)
+	if a.list.filtering {
+		return left + " · " + a.list.filterInput.View()
+	}
+	if a.list.filter != "" {
+		left += " · Filter: " + a.list.filter
+	}
+	return left
+}
 
 func (a *App) View() string {
 	var body string
@@ -119,7 +192,7 @@ func (a *App) View() string {
 	case modeHelp:
 		body = helpView()
 	default:
-		body = fmt.Sprintf("%d Frames geladen — ? für Hilfe", len(a.frames))
+		body = a.list.view(a.height - 1)
 	}
 	return body + "\n" + renderStatus(a.width, a.state, a.now, a.statusLeft(), a.errMsg)
 }
