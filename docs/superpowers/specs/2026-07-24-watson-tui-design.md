@@ -76,6 +76,7 @@ Tabelle: Datum, Start–Stop, Dauer, Projekt, Tags, Kurz-ID. Gruppierung nach Ta
 | `[` / `]` | Zeitraum zurück/vor (Woche) |
 | `w`/`m`/`a` | Zeitraum Woche/Monat/alles |
 | `r` | Report-View |
+| `o` | Übersicht (Abrechnung): Projekte × Zeiträume |
 | `R` | Reload von Disk |
 | `?` | Hilfe-Overlay |
 | `q` / `ctrl+c` | beenden |
@@ -92,6 +93,10 @@ Validierung:
 ### 3. Report-View
 
 Summen pro Projekt, darunter Tag-Breakdown (wie `watson report`). Zeitraum: Tag/Woche/Monat (`t`/`w`/`m` umschalten, `[`/`]` verschieben). Rein lesend, berechnet aus geladenen Frames. `esc` zurück zur Liste.
+
+### 3b. Übersicht (Abrechnung)
+
+Für Rechnungsstellung: eine Tabelle Projekte × feste Zeiträume — **diese Woche, letzte Woche, dieser Monat, letzter Monat, gesamt**. Zeilen = Projekte (sortiert nach Gesamtdauer, Ties alphabetisch), Zellen = Summen, leere Zellen als `–`, plus Gesamtzeile. Erreichbar aus der Liste mit `o`, `esc` zurück. Rein lesend, stateless (berechnet aus geladenen Frames, Wochenstart aus Config).
 
 ### 4. Statusbar (global)
 
