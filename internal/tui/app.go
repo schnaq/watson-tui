@@ -32,6 +32,7 @@ type App struct {
 	state  *watson.State
 
 	list listModel
+	form formModel
 
 	mode     mode
 	now      time.Time
@@ -98,6 +99,8 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		case modeList:
 			return a.updateList(msg)
+		case modeForm:
+			return a.updateForm(msg)
 		}
 	}
 	return a, nil
@@ -129,6 +132,16 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return a, tea.Quit
 	case "?":
 		a.mode = modeHelp
+	case "enter":
+		if f, ok := a.list.selected(); ok {
+			a.form = newFormModel(&f, a.frames, time.Now())
+			a.mode = modeForm
+			return a, textinput.Blink
+		}
+	case "n":
+		a.form = newFormModel(nil, a.frames, time.Now())
+		a.mode = modeForm
+		return a, textinput.Blink
 	case "j", "down":
 		a.list.move(+1)
 	case "k", "up":
@@ -166,6 +179,58 @@ func (a *App) setPeriodUnit(u periodUnit) {
 	a.list.refresh(a.frames, a.cfg.WeekStart)
 }
 
+func (a *App) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		a.mode = modeList
+		return a, nil
+	case "tab", "down":
+		a.form.setFocus(a.form.focus + 1)
+		return a, nil
+	case "shift+tab", "up":
+		a.form.setFocus(a.form.focus - 1)
+		return a, nil
+	case "enter", "ctrl+s":
+		return a.submitForm()
+	}
+	var cmd tea.Cmd
+	a.form.inputs[a.form.focus], cmd = a.form.inputs[a.form.focus].Update(msg)
+	return a, cmd
+}
+
+func (a *App) submitForm() (tea.Model, tea.Cmd) {
+	now := time.Now()
+	frame, err := buildFrame(
+		a.form.inputs[fieldProject].Value(),
+		a.form.inputs[fieldStart].Value(),
+		a.form.inputs[fieldStop].Value(),
+		a.form.inputs[fieldTags].Value(),
+		now,
+	)
+	if err != nil {
+		a.form.errMsg = err.Error()
+		return a, nil
+	}
+	if !a.form.warned && overlaps(frame, a.frames, a.form.frameID) {
+		a.form.warned = true
+		a.form.errMsg = "Überlappt mit anderem Frame — enter speichert trotzdem"
+		return a, nil
+	}
+	if a.form.editing {
+		frame.ID = a.form.frameID
+		err = a.store.Update(frame, now)
+	} else {
+		_, err = a.store.Add(frame, now)
+	}
+	if err != nil {
+		a.form.errMsg = "Speichern fehlgeschlagen: " + err.Error()
+		return a, nil
+	}
+	a.reload()
+	a.mode = modeList
+	return a, nil
+}
+
 // statusLeft is the view-specific left segment of the status bar.
 func (a *App) statusLeft() string {
 	n := 0
@@ -191,6 +256,8 @@ func (a *App) View() string {
 		body = styleError.Render("Fehler") + "\n\n" + a.fatalMsg + "\n\nBeliebige Taste beendet."
 	case modeHelp:
 		body = helpView()
+	case modeForm:
+		body = a.form.view()
 	default:
 		body = a.list.view(a.height - 1)
 	}

@@ -1,0 +1,168 @@
+package tui
+
+import (
+	"errors"
+	"fmt"
+	"sort"
+	"strings"
+	"time"
+
+	keybind "github.com/charmbracelet/bubbles/key"
+	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/schnaq/watson-tui/internal/watson"
+)
+
+const dtLayout = "2006-01-02 15:04"
+
+// parseDateTime accepts "2006-01-02 15:04[:05]" and "15:04" (= today), local time.
+func parseDateTime(s string, now time.Time) (time.Time, error) {
+	s = strings.TrimSpace(s)
+	loc := now.Location()
+	for _, layout := range []string{"2006-01-02 15:04:05", dtLayout} {
+		if t, err := time.ParseInLocation(layout, s, loc); err == nil {
+			return t, nil
+		}
+	}
+	if t, err := time.ParseInLocation("15:04", s, loc); err == nil {
+		return time.Date(now.Year(), now.Month(), now.Day(), t.Hour(), t.Minute(), 0, 0, loc), nil
+	}
+	return time.Time{}, fmt.Errorf("ungültige Zeit %q (YYYY-MM-DD HH:MM oder HH:MM)", s)
+}
+
+// splitTags parses a comma separated tag list.
+func splitTags(s string) []string {
+	parts := strings.Split(s, ",")
+	tags := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if t := strings.TrimSpace(p); t != "" {
+			tags = append(tags, t)
+		}
+	}
+	return tags
+}
+
+// buildFrame validates form fields into a Frame; ID and UpdatedAt stay unset.
+func buildFrame(project, startStr, stopStr, tagsStr string, now time.Time) (watson.Frame, error) {
+	project = strings.TrimSpace(project)
+	if project == "" {
+		return watson.Frame{}, errors.New("Projekt fehlt")
+	}
+	start, err := parseDateTime(startStr, now)
+	if err != nil {
+		return watson.Frame{}, err
+	}
+	stop, err := parseDateTime(stopStr, now)
+	if err != nil {
+		return watson.Frame{}, err
+	}
+	if !stop.After(start) {
+		return watson.Frame{}, errors.New("Stop muss nach Start liegen")
+	}
+	return watson.Frame{Start: start.UTC(), Stop: stop.UTC(), Project: project, Tags: splitTags(tagsStr)}, nil
+}
+
+// overlaps reports whether f overlaps any other frame (excludeID = frame being edited).
+func overlaps(f watson.Frame, frames []watson.Frame, excludeID string) bool {
+	for _, other := range frames {
+		if other.ID == excludeID {
+			continue
+		}
+		if f.Start.Before(other.Stop) && other.Start.Before(f.Stop) {
+			return true
+		}
+	}
+	return false
+}
+
+// projectNames returns the sorted unique project names for autocompletion.
+func projectNames(frames []watson.Frame) []string {
+	seen := map[string]bool{}
+	var names []string
+	for _, f := range frames {
+		if !seen[f.Project] {
+			seen[f.Project] = true
+			names = append(names, f.Project)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+const (
+	fieldProject = iota
+	fieldStart
+	fieldStop
+	fieldTags
+	fieldCount
+)
+
+type formModel struct {
+	editing bool
+	frameID string
+	inputs  [fieldCount]textinput.Model
+	focus   int
+	errMsg  string
+	warned  bool // overlap warning shown; next submit saves anyway
+}
+
+// newFormModel builds the form; existing == nil means "new frame".
+func newFormModel(existing *watson.Frame, frames []watson.Frame, now time.Time) formModel {
+	var m formModel
+	placeholders := [fieldCount]string{"Projekt", "YYYY-MM-DD HH:MM", "YYYY-MM-DD HH:MM", "tag1, tag2"}
+	for i := range m.inputs {
+		ti := textinput.New()
+		ti.Prompt = ""
+		ti.Placeholder = placeholders[i]
+		ti.Width = 40
+		m.inputs[i] = ti
+	}
+	m.inputs[fieldProject].ShowSuggestions = true
+	m.inputs[fieldProject].SetSuggestions(projectNames(frames))
+	m.inputs[fieldProject].KeyMap.AcceptSuggestion = keybind.NewBinding(keybind.WithKeys("right", "ctrl+e"))
+	if existing != nil {
+		m.editing = true
+		m.frameID = existing.ID
+		m.inputs[fieldProject].SetValue(existing.Project)
+		m.inputs[fieldStart].SetValue(existing.Start.Local().Format(dtLayout))
+		m.inputs[fieldStop].SetValue(existing.Stop.Local().Format(dtLayout))
+		m.inputs[fieldTags].SetValue(strings.Join(existing.Tags, ", "))
+	} else {
+		m.inputs[fieldStart].SetValue(now.Add(-time.Hour).Format(dtLayout))
+		m.inputs[fieldStop].SetValue(now.Format(dtLayout))
+	}
+	m.inputs[fieldProject].Focus()
+	return m
+}
+
+func (m *formModel) setFocus(i int) {
+	m.focus = (i + fieldCount) % fieldCount
+	for j := range m.inputs {
+		if j == m.focus {
+			m.inputs[j].Focus()
+		} else {
+			m.inputs[j].Blur()
+		}
+	}
+}
+
+func (m formModel) view() string {
+	title := "Neuer Frame"
+	if m.editing {
+		title = "Frame bearbeiten (" + m.frameID[:7] + ")"
+	}
+	labels := [fieldCount]string{"Projekt", "Start  ", "Stop   ", "Tags   "}
+	var b strings.Builder
+	b.WriteString(styleTitle.Render(title) + "\n\n")
+	for i := range m.inputs {
+		cursor := "  "
+		if i == m.focus {
+			cursor = "> "
+		}
+		b.WriteString(fmt.Sprintf("%s%s %s\n", cursor, labels[i], m.inputs[i].View()))
+	}
+	if m.errMsg != "" {
+		b.WriteString("\n" + styleError.Render(m.errMsg))
+	}
+	b.WriteString("\n" + styleDim.Render("tab: Feld · →: Vorschlag übernehmen · enter: speichern · esc: abbrechen"))
+	return b.String()
+}
