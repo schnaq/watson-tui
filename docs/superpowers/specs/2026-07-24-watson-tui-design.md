@@ -107,7 +107,7 @@ Läuft ein Timer: `▶ projekt [tags] 01:23:45` — tickt sekündlich (Bubble Te
 ## Tests
 
 - **Datenlayer:** Round-Trip-Tests gegen Fixture-Dateien im echten Watson-Format (inkl. Unicode-Projekte, leere Tags, `.bak`-Rotation, Prefix-Lookup, leeres/fehlendes Verzeichnis, korruptes JSON). Byte-genaue Serialisierungs-Golden-Tests (Indent = 1).
-- **TUI:** Update-Funktionen als reine Unit-Tests (Key-Event rein, Model-Zustand raus). Kern-Flows (Liste → Edit → Save, Start → Stop) mit `charmbracelet/x/exp/teatest`.
+- **TUI:** Update-Funktionen als reine Unit-Tests (Key-Event rein, Model-Zustand raus). Kern-Flows (Liste → Edit → Save, Start → Stop, Delete) als Update-getriebene Flow-Tests gegen einen Temp-Store — deterministisch, ohne Zusatz-Dependency.
 - **CI-Gate:** `go test ./...` + `golangci-lint run` müssen grün sein.
 
 ## CI/CD & Distribution
