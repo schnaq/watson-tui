@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/gofrs/flock"
 )
 
 func TestSafeSaveCreatesFileAndDir(t *testing.T) {
@@ -57,5 +60,30 @@ func TestWithLockRuns(t *testing.T) {
 	}
 	if !ran {
 		t.Error("fn did not run")
+	}
+}
+
+func TestWithLockContention(t *testing.T) {
+	dir := t.TempDir()
+
+	// Hold the lock from an external flock handle to simulate another process.
+	external := flock.New(filepath.Join(dir, ".watson-tui.lock"))
+	if err := external.Lock(); err != nil {
+		t.Fatalf("external lock: %v", err)
+	}
+	defer func() { _ = external.Unlock() }()
+
+	// Shorten the acquisition timeout so the test stays fast and deterministic.
+	prev := lockTimeout
+	lockTimeout = 200 * time.Millisecond
+	defer func() { lockTimeout = prev }()
+
+	ran := false
+	err := withLock(dir, func() error { ran = true; return nil })
+	if err == nil {
+		t.Fatal("expected contention error, got nil")
+	}
+	if ran {
+		t.Error("fn ran despite lock contention")
 	}
 }

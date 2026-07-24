@@ -3,6 +3,7 @@ package watson
 import (
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -32,14 +33,29 @@ func safeSave(path string, data []byte) error {
 		return err
 	}
 	if _, err := os.Stat(path); err == nil {
+		// The destination exists: rotate it to .bak before replacing.
 		_ = os.Remove(path + ".bak")
 		if err := os.Rename(path, path+".bak"); err != nil {
 			_ = os.Remove(tmpName)
 			return err
 		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		// A stat error other than "does not exist" is a real problem; do not
+		// silently skip rotation. Clean up the temp file first.
+		_ = os.Remove(tmpName)
+		return err
 	}
-	return os.Rename(tmpName, path)
+	if err := os.Rename(tmpName, path); err != nil {
+		_ = os.Remove(tmpName)
+		return err
+	}
+	return nil
 }
+
+// lockTimeout bounds how long withLock waits to acquire the advisory lock
+// before treating the situation as contention. It is a package var so tests
+// can shorten it.
+var lockTimeout = 3 * time.Second
 
 // withLock runs fn while holding an advisory lock on <dir>/.watson-tui.lock.
 // Watson itself has no locking; this protects concurrent watson-tui writers.
@@ -49,13 +65,22 @@ func withLock(dir string, fn func() error) error {
 		return err
 	}
 	fl := flock.New(filepath.Join(dir, ".watson-tui.lock"))
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), lockTimeout)
 	defer cancel()
 	ok, err := fl.TryLockContext(ctx, 100*time.Millisecond)
 	if err != nil {
+		// Timeout or cancellation means the lock is genuinely held by another
+		// process: refuse rather than run unlocked.
+		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			return errors.New("watson-Verzeichnis ist von anderem Prozess gesperrt")
+		}
+		// Any other error (e.g. a filesystem that does not support flock) is
+		// treated as best-effort: run without the lock.
 		return fn()
 	}
 	if !ok {
+		// Defensive fallback: flock should return DeadlineExceeded on timeout,
+		// but guard against (false, nil) just in case.
 		return errors.New("watson-Verzeichnis ist von anderem Prozess gesperrt")
 	}
 	defer func() { _ = fl.Unlock() }()
