@@ -37,6 +37,7 @@ type App struct {
 
 	pendingDelete watson.Frame
 	start         startModel
+	report        reportModel
 
 	mode     mode
 	now      time.Time
@@ -103,6 +104,22 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a, nil
 		case modeList:
 			return a.updateList(msg)
+		case modeReport:
+			switch msg.String() {
+			case "esc", "q", "r":
+				a.mode = modeList
+			case "t":
+				a.report.per = period{unit: unitDay, ref: time.Now()}
+			case "w":
+				a.report.per = period{unit: unitWeek, ref: time.Now()}
+			case "m":
+				a.report.per = period{unit: unitMonth, ref: time.Now()}
+			case "[":
+				a.report.per = a.report.per.shift(a.cfg.WeekStart, -1)
+			case "]":
+				a.report.per = a.report.per.shift(a.cfg.WeekStart, +1)
+			}
+			return a, nil
 		case modeForm:
 			return a.updateForm(msg)
 		case modeStartTimer:
@@ -216,6 +233,9 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "R":
 		a.reload()
+	case "r":
+		a.report = newReportModel(time.Now())
+		a.mode = modeReport
 	}
 	return a, nil
 }
@@ -342,6 +362,8 @@ func (a *App) View() string {
 		body = helpView()
 	case modeForm:
 		body = a.form.view()
+	case modeReport:
+		body = a.report.view(a.frames, a.cfg.WeekStart)
 	case modeStartTimer:
 		body = a.start.view()
 	case modeConfirmCancel:
