@@ -29,6 +29,9 @@ func ParseState(data []byte) (*State, error) {
 	if err := json.Unmarshal(trimmed, &raw); err != nil {
 		return nil, err
 	}
+	// An empty or missing project means no timer is running: treat it as idle
+	// (nil, nil) rather than an error, matching the `{}` / empty-file semantics.
+	// Defensive against a malformed state file that carries a start but no project.
 	if raw.Project == "" {
 		return nil, nil
 	}
