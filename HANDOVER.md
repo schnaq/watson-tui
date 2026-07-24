@@ -18,11 +18,11 @@ Subagent-driven Development nach `superpowers:subagent-driven-development`:
 1. Pro Task: BASE-Commit merken → Task-Text aus dem Plan extrahieren (Abschnitt `### Task N:`) → **Implementer-Subagent (Modell: Opus)** mit Task-Brief dispatchen (TDD: Test zuerst, RED verifizieren, dann implementieren; Extra-Tests für offensichtliche Fehlerpfad-Lücken erwünscht)
 2. Danach **Task-Review-Subagent (Sonnet; Opus bei Integrationsrisiko)** über den Diff BASE..HEAD; Critical/Important-Findings → Fix-Subagent → Re-Review
 3. Task fertig → Commit liegt vor → **pushen** → **Linear-Issue auf Done** setzen (nächstes auf In Progress)
-4. Commit-Messages: conventional (`feat:`/`test:`/`ci:`/`docs:`), Trailer:
-   `Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>` (Session-Trailer der jeweiligen Session)
+4. Commit-Messages: conventional (`feat:`/`test:`/`ci:`/`docs:`), Trailer: `Co-Authored-By: <Modell der Session> <noreply@anthropic.com>` plus `Claude-Session:`-Zeile der jeweiligen Session
+   – Task 16 lief in einer Session, in der Subagents per Session-Policy gesperrt waren: TDD inline, kein separates Review-Subagent. Diff `fd3d7f6..2f363dd` beim Final-Review mit abdecken.
 5. UI-Texte deutsch, Code/Bezeichner englisch. Erlaubte Deps: charm-Stack (bubbletea/bubbles/lipgloss), gofrs/flock, google/uuid, ini.v1 — sonst nichts.
 
-## Status: 13 von 16 Tasks fertig (alle reviewed)
+## Status: 14 von 16 Tasks fertig
 
 | Task | Inhalt | Linear | Status |
 |---|---|---|---|
@@ -39,17 +39,13 @@ Subagent-driven Development nach `superpowers:subagent-driven-development`:
 | 11 | Löschen + Reload | SNQ-585 | ✅ Done |
 | 12 | Live-Timer (s/S) | SNQ-586 | ✅ Done |
 | 13 | Report-View (r) | SNQ-587 | ✅ Done |
-| **16** | **Abrechnungs-Übersicht (o)** | **SNQ-590** | ⬜ **NÄCHSTER SCHRITT** |
-| 14 | CI-Workflow | SNQ-588 | ⬜ offen |
+| 16 | Abrechnungs-Übersicht (o) | SNQ-590 | ✅ Done (inkl. Extra-Tests; kein Subagent-Review, s. u.) |
+| **14** | **CI-Workflow** | **SNQ-588** | ⬜ **NÄCHSTER SCHRITT** |
 | 15 | Release-Pipeline + README | SNQ-589 | ⬜ offen |
 
-Letzter Commit auf `feature/watson-tui`: `fd3d7f6` (Task 13). Reihenfolge der Rest-Tasks: **16 → 14 → 15**.
+Letzter Commit auf `feature/watson-tui`: `2f363dd` (Task 16). Reihenfolge der Rest-Tasks: **14 → 15**.
 
-## Nächster Schritt: Task 16
-
-Implementer-Subagent starb am Org-Spend-Limit, **bevor** Code geschrieben wurde — Tree clean, einfach neu dispatchen. Task-Text: Plan-Abschnitt `### Task 16: Übersicht (Abrechnungs-Statistik)` (voller Code enthalten). BASE: `fd3d7f6`. Kontext für den Implementer: mode-Enum-Konstante `modeOverview` ans Ende des iota-Blocks; `bubbles/key` wird im Paket als `keybind` aliased (Kollision mit Test-Helper `func key`); `o`-Zeile in `helpView()` ergänzen.
-
-## Danach: Task 14 (CI) und Task 15 (Release)
+## Nächster Schritt: Task 14 (CI), danach Task 15 (Release)
 
 - Runner: `runs-on: self-hosted` — matcht **gimli (macOS)** oder **OpenSuse (Linux)**. Workflows OS-agnostisch halten (actions/setup-go, kein brew in CI).
 - Task 15 enthält **eine USER ACTION**: Fine-grained PAT für `schnaq/homebrew-tap` (Contents: Read+Write) erstellen und als Secret setzen: `gh secret set TAP_GITHUB_TOKEN --repo schnaq/watson-tui`. Davor Tap-Repo anlegen (`gh repo create schnaq/homebrew-tap --public`). STOPP bis Secret da ist.
@@ -69,6 +65,10 @@ Implementer-Subagent starb am Org-Spend-Limit, **bevor** Code geschrieben wurde 
 - Task 10: `warned`-Flag ist One-Way-Latch (kein Re-Check nach Feldänderung); `frameID[:7]`-Panic theoretisch möglich; Sekunden gehen beim Edit-Roundtrip verloren (dtLayout minutengenau)
 - Task 12: Start-Fehler ohne deutschen Prefix in Prompt-errMsg; Autocomplete-Accept (right/ctrl+e) ungetestet
 - Task 13: Statusbar zeigt im Report die Listen-Periode; Tag-Summen > Projektsumme bei Mehrfach-Tags (als „Zeit pro Tag" dokumentieren, z. B. im README)
+- Task 16: Zeilenbreite der Übersicht ist fix ~94 Spalten (24 + 5×14), ohne Umbruch-/Scroll-Handling — bricht auf 80-Spalten-Terminals um (`App`-Default ist width 80)
+- Task 16: laufender Timer fehlt in den Summen (`overviewView` liest nur `a.frames`, nicht `a.state`) — in der Abrechnung ggf. überraschend
+- Task 16: Statusbar zeigt in der Übersicht weiter die Listen-Periode (gleiches Muster wie Task 13)
+- Vorbestehend: `internal/tui/frameform_test.go` ist nicht gofmt-konform (`gofmt -l .`), seit `4b22852`
 
 ## Verifikation nach jedem Task
 
