@@ -22,7 +22,7 @@ Subagent-driven Development nach `superpowers:subagent-driven-development`:
    – Task 16 lief in einer Session, in der Subagents per Session-Policy gesperrt waren: TDD inline, kein separates Review-Subagent. Diff `fd3d7f6..2f363dd` beim Final-Review mit abdecken.
 5. UI-Texte deutsch, Code/Bezeichner englisch. Erlaubte Deps: charm-Stack (bubbletea/bubbles/lipgloss), gofrs/flock, google/uuid, ini.v1 — sonst nichts.
 
-## Status: 14 von 16 Tasks fertig
+## Status: 15 von 16 Tasks fertig
 
 | Task | Inhalt | Linear | Status |
 |---|---|---|---|
@@ -40,15 +40,24 @@ Subagent-driven Development nach `superpowers:subagent-driven-development`:
 | 12 | Live-Timer (s/S) | SNQ-586 | ✅ Done |
 | 13 | Report-View (r) | SNQ-587 | ✅ Done |
 | 16 | Abrechnungs-Übersicht (o) | SNQ-590 | ✅ Done (inkl. Extra-Tests; kein Subagent-Review, s. u.) |
-| **14** | **CI-Workflow** | **SNQ-588** | ⬜ **NÄCHSTER SCHRITT** |
-| 15 | Release-Pipeline + README | SNQ-589 | ⬜ offen |
+| 14 | CI-Workflow | SNQ-588 | ✅ Code fertig, **CI-Lauf noch nicht beobachtet** (s. u.) |
+| **15** | **Release-Pipeline + README** | **SNQ-589** | ⬜ **NÄCHSTER SCHRITT** |
 
-Letzter Commit auf `feature/watson-tui`: `2f363dd` (Task 16). Reihenfolge der Rest-Tasks: **14 → 15**.
+Letzter Commit auf `feature/watson-tui`: `02bfbbf` (Task 14).
 
-## Nächster Schritt: Task 14 (CI), danach Task 15 (Release)
+## Offen aus Task 14: CI-Lauf verifizieren
 
+`.github/workflows/ci.yml` triggert nur auf `push: main` und `pull_request` — auf `feature/watson-tui` läuft also nichts. Verifikation braucht **einen PR** (`gh pr create --base main`, dann `gh run watch --exit-status`) oder den End-Merge auf `main`. Bis dahin bleibt SNQ-588 in Progress.
+
+- Lokal ist das Gate grün: `go build ./... && go test ./... && go vet ./... && golangci-lint run ./...` (0 Findings).
+- `.golangci.yml` (v2-Format) aktiviert staticcheck mit `all` minus `ST1005` (deutsche Fehlertexte sind UI-Text, Substantive groß). `all` ist strenger als der golangci-lint-Default — deshalb kamen ST1000/QF1012 dazu und sind in `93d2eff` gefixt (Package-Docs, `fmt.Fprintf` statt `WriteString(fmt.Sprintf(...))`).
+- Runner-Check: `gh api repos/schnaq/watson-tui/actions/runners` liefert 0 (repo-level); Org-Ebene ist mit dem aktuellen Token nicht abfragbar (403, braucht `admin:org`). Laut User-Vorgabe existieren die Runner auf Org-Ebene — deshalb nicht blockiert.
 - Runner: `runs-on: self-hosted` — matcht **gimli (macOS)** oder **OpenSuse (Linux)**. Workflows OS-agnostisch halten (actions/setup-go, kein brew in CI).
-- Task 15 enthält **eine USER ACTION**: Fine-grained PAT für `schnaq/homebrew-tap` (Contents: Read+Write) erstellen und als Secret setzen: `gh secret set TAP_GITHUB_TOKEN --repo schnaq/watson-tui`. Davor Tap-Repo anlegen (`gh repo create schnaq/homebrew-tap --public`). STOPP bis Secret da ist.
+
+## Nächster Schritt: Task 15 (Release-Pipeline + README)
+
+- Tap-Repo `schnaq/homebrew-tap` **existiert bereits** — nicht neu anlegen.
+- **USER ACTION, blockierend:** Fine-grained PAT für `schnaq/homebrew-tap` (Contents: Read+Write) erstellen und als Secret setzen: `gh secret set TAP_GITHUB_TOKEN --repo schnaq/watson-tui`. `gh secret list --repo schnaq/watson-tui` ist derzeit leer. STOPP bis Secret da ist.
 - Release: Tag `v0.1.0` pushen → GoReleaser → Release + Formel im Tap → `brew install schnaq/tap/watson-tui` verifizieren.
 
 ## Nach Task 15: Abschluss
@@ -68,7 +77,7 @@ Letzter Commit auf `feature/watson-tui`: `2f363dd` (Task 16). Reihenfolge der Re
 - Task 16: Zeilenbreite der Übersicht ist fix ~94 Spalten (24 + 5×14), ohne Umbruch-/Scroll-Handling — bricht auf 80-Spalten-Terminals um (`App`-Default ist width 80)
 - Task 16: laufender Timer fehlt in den Summen (`overviewView` liest nur `a.frames`, nicht `a.state`) — in der Abrechnung ggf. überraschend
 - Task 16: Statusbar zeigt in der Übersicht weiter die Listen-Periode (gleiches Muster wie Task 13)
-- Vorbestehend: `internal/tui/frameform_test.go` ist nicht gofmt-konform (`gofmt -l .`), seit `4b22852`
+- Task 14: CI prüft kein `gofmt`/`gci` — Formatverstöße fallen nur lokal auf (`gofmt -l .`)
 
 ## Verifikation nach jedem Task
 
