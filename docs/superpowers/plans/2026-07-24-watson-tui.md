@@ -3544,6 +3544,8 @@ git commit -m "feat: report view with per-project and per-tag totals"
 - Consumes: grüne Testsuite (Tasks 1–13)
 - Produces: CI-Gate auf `main` + PRs (build, vet, test, golangci-lint)
 
+> **Runner-Umgebung (User-Vorgabe):** `runs-on: self-hosted` matcht gimli (macOS) **oder** einen OpenSuse-Runner (Linux). Workflows müssen auf beiden laufen: keine OS-spezifischen Annahmen, Toolchain via `actions/setup-go`, GoReleaser cross-kompiliert mit `CGO_ENABLED=0` von beiden Plattformen.
+
 - [ ] **Step 1: Runner prüfen**
 
 ```bash
