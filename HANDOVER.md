@@ -40,25 +40,33 @@ Subagent-driven Development nach `superpowers:subagent-driven-development`:
 | 12 | Live-Timer (s/S) | SNQ-586 | ✅ Done |
 | 13 | Report-View (r) | SNQ-587 | ✅ Done |
 | 16 | Abrechnungs-Übersicht (o) | SNQ-590 | ✅ Done (inkl. Extra-Tests; kein Subagent-Review, s. u.) |
-| 14 | CI-Workflow | SNQ-588 | ✅ Code fertig, **CI-Lauf noch nicht beobachtet** (s. u.) |
-| **15** | **Release-Pipeline + README** | **SNQ-589** | ⬜ **NÄCHSTER SCHRITT** |
+| 14 | CI-Workflow | SNQ-588 | ✅ Done — CI grün auf `b3d878a` (Jobs `test` + `lint`) |
+| **15** | **Release-Pipeline + README** | **SNQ-589** | 🟡 **Vorarbeit committet, Release blockiert (s. u.)** |
 
-Letzter Commit auf `feature/watson-tui`: `02bfbbf` (Task 14).
+Letzter Commit auf `feature/watson-tui`: `500761b` (Task 15, Vorarbeit).
 
-## Offen aus Task 14: CI-Lauf verifizieren
+## PR und CI
 
-`.github/workflows/ci.yml` triggert nur auf `push: main` und `pull_request` — auf `feature/watson-tui` läuft also nichts. Verifikation braucht **einen PR** (`gh pr create --base main`, dann `gh run watch --exit-status`) oder den End-Merge auf `main`. Bis dahin bleibt SNQ-588 in Progress.
+Draft-PR [#1](https://github.com/schnaq/watson-tui/pull/1) `feature/watson-tui` → `main` ist offen; `.github/workflows/ci.yml` triggert auf `push: main` und `pull_request`, läuft also bei jedem Push auf den Branch. Der Lauf zu `b3d878a` war grün (test + lint auf dem self-hosted Runner). Der PR ist bewusst Draft — echter Merge erst nach Final-Review.
 
 - Lokal ist das Gate grün: `go build ./... && go test ./... && go vet ./... && golangci-lint run ./...` (0 Findings).
 - `.golangci.yml` (v2-Format) aktiviert staticcheck mit `all` minus `ST1005` (deutsche Fehlertexte sind UI-Text, Substantive groß). Weil `all` auch künftige Checks einschaltet, ist die Lint-Version im Workflow auf `v2.12.2` gepinnt (lokal verifizierte Version) — beim Hochziehen `golangci-lint run ./...` lokal gegenläufig prüfen. `all` ist strenger als der golangci-lint-Default — deshalb kamen ST1000/QF1012 dazu und sind in `93d2eff` gefixt (Package-Docs, `fmt.Fprintf` statt `WriteString(fmt.Sprintf(...))`).
 - Runner-Check: `gh api repos/schnaq/watson-tui/actions/runners` liefert 0 (repo-level); Org-Ebene ist mit dem aktuellen Token nicht abfragbar (403, braucht `admin:org`). Laut User-Vorgabe existieren die Runner auf Org-Ebene — deshalb nicht blockiert.
 - Runner: `runs-on: self-hosted` — matcht **gimli (macOS)** oder **OpenSuse (Linux)**. Workflows OS-agnostisch halten (actions/setup-go, kein brew in CI).
 
-## Nächster Schritt: Task 15 (Release-Pipeline + README)
+## Task 15: Stand und offene Schritte
 
-- Tap-Repo `schnaq/homebrew-tap` **existiert bereits** — nicht neu anlegen.
-- **USER ACTION, blockierend:** Fine-grained PAT für `schnaq/homebrew-tap` (Contents: Read+Write) erstellen und als Secret setzen: `gh secret set TAP_GITHUB_TOKEN --repo schnaq/watson-tui`. `gh secret list --repo schnaq/watson-tui` ist derzeit leer. STOPP bis Secret da ist.
-- Release: Tag `v0.1.0` pushen → GoReleaser → Release + Formel im Tap → `brew install schnaq/tap/watson-tui` verifizieren.
+Fertig und committet (`500761b`): `.goreleaser.yaml`, `.github/workflows/release.yml`, `README.md`.
+
+- `goreleaser check` valide; Snapshot-Build lokal verifiziert (4 Archive darwin/linux × amd64/arm64, Cask generiert, `--version` gibt die injizierte Version aus).
+- **Plan-Abweichung:** Der Plan nutzt `brews:` — GoReleaser hat das in v2.16 entfernt. Stattdessen `homebrew_casks:` mit `binaries: [watson-tui]` und `postflight`-Hook, der das Quarantine-Flag entfernt (Binary ist unsigniert). Folgen: Installation ist `brew install --cask schnaq/tap/watson-tui`, Casks sind **macOS-only** (Linux → Release-Archiv), und die `test`-Stanza aus dem Plan fällt weg (Casks haben keine). goreleaser-action ist auf `~> v2.16` gepinnt.
+- Tap-Repo `schnaq/homebrew-tap` existiert, ist aber **leer (kein initialer Commit, kein default branch)**. Vor dem ersten Release prüfen, ob GoReleaser dorthin pushen kann — sonst einmal mit README initialisieren.
+
+Offene Schritte (Plan Task 15, Steps 6 und 8–10):
+
+1. **USER ACTION, blockierend:** Fine-grained PAT für `schnaq/homebrew-tap` (Contents: Read+Write) erstellen und als Secret setzen: `gh secret set TAP_GITHUB_TOKEN --repo schnaq/watson-tui`. `gh secret list --repo schnaq/watson-tui` ist derzeit leer. STOPP bis Secret da ist.
+2. Tag `v0.1.0` pushen → `gh run watch --exit-status` → Release-Assets prüfen (4 tar.gz + checksums.txt) → `watson-tui.rb` im Tap unter `Casks/`.
+3. Smoke-Test: `brew install --cask schnaq/tap/watson-tui && watson-tui --version` → `watson-tui 0.1.0`.
 
 ## Nach Task 15: Abschluss
 
@@ -78,6 +86,8 @@ Letzter Commit auf `feature/watson-tui`: `02bfbbf` (Task 14).
 - Task 16: laufender Timer fehlt in den Summen (`overviewView` liest nur `a.frames`, nicht `a.state`) — in der Abrechnung ggf. überraschend
 - Task 16: Statusbar zeigt in der Übersicht weiter die Listen-Periode (gleiches Muster wie Task 13)
 - Task 14: CI prüft kein `gofmt`/`gci` — Formatverstöße fallen nur lokal auf (`gofmt -l .`)
+- Task 14/15: CI-Annotations melden Node-20-Deprecation für `actions/checkout@v4` und `actions/setup-go@v5` (werden auf Node 24 gezwungen) sowie einen fehlgeschlagenen Cache-Restore (`/usr/bin/tar` exit 2) auf dem Runner — beides nur Warnungen, Actions-Versionen beim nächsten Anlass hochziehen
+- Task 15: Release läuft auf `runs-on: self-hosted`, also auf gimli **oder** OpenSuse; `CGO_ENABLED=0` macht die Builds plattformunabhängig, aber der Cask-Push hängt am Runner-Netzzugang zu GitHub
 
 ## Verifikation nach jedem Task
 
