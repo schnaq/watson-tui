@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -35,6 +36,7 @@ type App struct {
 	form formModel
 
 	pendingDelete watson.Frame
+	start         startModel
 
 	mode     mode
 	now      time.Time
@@ -103,6 +105,17 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a.updateList(msg)
 		case modeForm:
 			return a.updateForm(msg)
+		case modeStartTimer:
+			return a.updateStartTimer(msg)
+		case modeConfirmCancel:
+			if s := msg.String(); s == "y" || s == "enter" {
+				if err := a.store.Cancel(); err != nil {
+					a.errMsg = "Verwerfen fehlgeschlagen: " + err.Error()
+				}
+				a.reload()
+			}
+			a.mode = modeList
+			return a, nil
 		case modeConfirmDelete:
 			if s := msg.String(); s == "y" || s == "enter" {
 				if err := a.store.Delete(a.pendingDelete.ID); err != nil {
@@ -186,6 +199,21 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			a.pendingDelete = f
 			a.mode = modeConfirmDelete
 		}
+	case "s":
+		if a.state != nil {
+			if _, err := a.store.Stop(time.Now()); err != nil {
+				a.errMsg = "Stop fehlgeschlagen: " + err.Error()
+			}
+			a.reload()
+		} else {
+			a.start = newStartModel(a.frames)
+			a.mode = modeStartTimer
+			return a, textinput.Blink
+		}
+	case "S":
+		if a.state != nil {
+			a.mode = modeConfirmCancel
+		}
 	case "R":
 		a.reload()
 	}
@@ -249,6 +277,44 @@ func (a *App) submitForm() (tea.Model, tea.Cmd) {
 	return a, nil
 }
 
+func (a *App) updateStartTimer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		a.mode = modeList
+		return a, nil
+	case "tab", "shift+tab", "down", "up":
+		a.start.focus = 1 - a.start.focus
+		if a.start.focus == 0 {
+			a.start.project.Focus()
+			a.start.tags.Blur()
+		} else {
+			a.start.tags.Focus()
+			a.start.project.Blur()
+		}
+		return a, nil
+	case "enter":
+		project := strings.TrimSpace(a.start.project.Value())
+		if project == "" {
+			a.start.errMsg = "Projekt fehlt"
+			return a, nil
+		}
+		if err := a.store.Start(project, splitTags(a.start.tags.Value()), time.Now()); err != nil {
+			a.start.errMsg = err.Error()
+			return a, nil
+		}
+		a.reload()
+		a.mode = modeList
+		return a, nil
+	}
+	var cmd tea.Cmd
+	if a.start.focus == 0 {
+		a.start.project, cmd = a.start.project.Update(msg)
+	} else {
+		a.start.tags, cmd = a.start.tags.Update(msg)
+	}
+	return a, cmd
+}
+
 // statusLeft is the view-specific left segment of the status bar.
 func (a *App) statusLeft() string {
 	n := 0
@@ -276,6 +342,11 @@ func (a *App) View() string {
 		body = helpView()
 	case modeForm:
 		body = a.form.view()
+	case modeStartTimer:
+		body = a.start.view()
+	case modeConfirmCancel:
+		body = styleTitle.Render("Laufenden Timer verwerfen?") + "\n\n" +
+			styleDim.Render("y/enter: verwerfen · andere Taste: abbrechen")
 	case modeConfirmDelete:
 		f := a.pendingDelete
 		body = styleTitle.Render("Frame löschen?") + fmt.Sprintf("\n\n  %s  %s–%s  %s\n\n%s",
