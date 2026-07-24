@@ -34,6 +34,8 @@ type App struct {
 	list listModel
 	form formModel
 
+	pendingDelete watson.Frame
+
 	mode     mode
 	now      time.Time
 	errMsg   string // transient, shown in status bar, cleared on next key
@@ -101,6 +103,15 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return a.updateList(msg)
 		case modeForm:
 			return a.updateForm(msg)
+		case modeConfirmDelete:
+			if s := msg.String(); s == "y" || s == "enter" {
+				if err := a.store.Delete(a.pendingDelete.ID); err != nil {
+					a.errMsg = "Löschen fehlgeschlagen: " + err.Error()
+				}
+				a.reload()
+			}
+			a.mode = modeList
+			return a, nil
 		}
 	}
 	return a, nil
@@ -170,6 +181,13 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.setPeriodUnit(unitMonth)
 	case "a":
 		a.setPeriodUnit(unitAll)
+	case "d":
+		if f, ok := a.list.selected(); ok {
+			a.pendingDelete = f
+			a.mode = modeConfirmDelete
+		}
+	case "R":
+		a.reload()
 	}
 	return a, nil
 }
@@ -258,6 +276,14 @@ func (a *App) View() string {
 		body = helpView()
 	case modeForm:
 		body = a.form.view()
+	case modeConfirmDelete:
+		f := a.pendingDelete
+		body = styleTitle.Render("Frame löschen?") + fmt.Sprintf("\n\n  %s  %s–%s  %s\n\n%s",
+			f.Project,
+			f.Start.Local().Format("2006-01-02 15:04"),
+			f.Stop.Local().Format("15:04"),
+			f.ShortID(),
+			styleDim.Render("y/enter: löschen · andere Taste: abbrechen"))
 	default:
 		body = a.list.view(a.height - 1)
 	}
