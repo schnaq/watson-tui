@@ -19,7 +19,7 @@ Subagent-driven Development nach `superpowers:subagent-driven-development`:
 2. Danach **Task-Review-Subagent (Sonnet; Opus bei Integrationsrisiko)** über den Diff BASE..HEAD; Critical/Important-Findings → Fix-Subagent → Re-Review
 3. Task fertig → Commit liegt vor → **pushen** → **Linear-Issue auf Done** setzen (nächstes auf In Progress)
 4. Commit-Messages: conventional (`feat:`/`test:`/`ci:`/`docs:`), Trailer: `Co-Authored-By: <Modell der Session> <noreply@anthropic.com>` plus `Claude-Session:`-Zeile der jeweiligen Session
-   – Task 16 lief in einer Session, in der Subagents per Session-Policy gesperrt waren: TDD inline, kein separates Review-Subagent. Diff `fd3d7f6..2f363dd` beim Final-Review mit abdecken.
+   – Tasks 16, 14 und 15 liefen in einer Session, in der Subagents per Session-Policy gesperrt waren: TDD inline, kein separates Review-Subagent. Alles nach `e504482` (`e504482..HEAD`, aktuell bis `e5eb9da`) ist unreviewed — beim Final-Review mit abdecken.
 5. UI-Texte deutsch, Code/Bezeichner englisch. Erlaubte Deps: charm-Stack (bubbletea/bubbles/lipgloss), gofrs/flock, google/uuid, ini.v1 — sonst nichts.
 
 ## Status: 15 von 16 Tasks fertig
