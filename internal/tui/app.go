@@ -21,6 +21,7 @@ const (
 	modeConfirmCancel
 	modeHelp
 	modeFatal
+	modeOverview
 )
 
 // App is the Bubble Tea root model.
@@ -118,6 +119,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.report.per = a.report.per.shift(a.cfg.WeekStart, -1)
 			case "]":
 				a.report.per = a.report.per.shift(a.cfg.WeekStart, +1)
+			}
+			return a, nil
+		case modeOverview:
+			switch msg.String() {
+			case "esc", "q", "o":
+				a.mode = modeList
 			}
 			return a, nil
 		case modeForm:
@@ -236,6 +243,8 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		a.report = newReportModel(time.Now())
 		a.mode = modeReport
+	case "o":
+		a.mode = modeOverview
 	}
 	return a, nil
 }
@@ -364,6 +373,8 @@ func (a *App) View() string {
 		body = a.form.view()
 	case modeReport:
 		body = a.report.view(a.frames, a.cfg.WeekStart)
+	case modeOverview:
+		body = overviewView(a.frames, a.cfg.WeekStart, a.now)
 	case modeStartTimer:
 		body = a.start.view()
 	case modeConfirmCancel:
@@ -396,6 +407,7 @@ func helpView() string {
   [ / ]         Zeitraum zurück/vor
   t/w/m/a       Tag/Woche/Monat/alles
   r             Report
+  o             Übersicht (Abrechnung)
   R             neu laden
   ?             diese Hilfe
   q             beenden
