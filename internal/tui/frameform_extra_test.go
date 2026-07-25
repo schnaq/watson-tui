@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/schnaq/watson-tui/internal/watson"
 )
 
@@ -98,6 +99,46 @@ func TestSubmitFormValidationError(t *testing.T) {
 	}
 	if app.form.errMsg == "" {
 		t.Error("validation error must set errMsg")
+	}
+}
+
+// TestEditRoundTripKeepsSeconds: Watson timestamps carry seconds. A pure
+// project rename must leave the times untouched — a minute-precision pre-fill
+// would be re-parsed on save and silently shorten the frame, which then lands
+// on an invoice.
+func TestEditRoundTripKeepsSeconds(t *testing.T) {
+	store := watson.NewStore(t.TempDir())
+	added, err := store.Add(watson.Frame{
+		Start:   time.Date(2026, 7, 20, 9, 0, 17, 0, time.Local),
+		Stop:    time.Date(2026, 7, 20, 10, 30, 42, 0, time.Local),
+		Project: "alt", Tags: []string{},
+	}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := NewApp(store, "test")
+	app.Init()
+	app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	app.Update(key("a")) // Zeitraum "alles"
+	app.Update(key("enter"))
+	if app.mode != modeForm || !app.form.editing {
+		t.Fatal("enter must open the edit form")
+	}
+	app.form.inputs[fieldProject].SetValue("neu")
+	app.Update(key("enter"))
+	if app.mode != modeList {
+		t.Fatalf("save failed: %q", app.form.errMsg)
+	}
+	frames, _ := store.Frames()
+	if len(frames) != 1 || frames[0].Project != "neu" {
+		t.Fatalf("frames = %+v", frames)
+	}
+	if !frames[0].Start.Equal(added.Start) || !frames[0].Stop.Equal(added.Stop) {
+		t.Errorf("edit shifted the times: %v–%v, want %v–%v",
+			frames[0].Start, frames[0].Stop, added.Start, added.Stop)
+	}
+	if got, want := frames[0].Duration(), added.Duration(); got != want {
+		t.Errorf("duration = %v, want %v", got, want)
 	}
 }
 

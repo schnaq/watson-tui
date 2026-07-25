@@ -125,6 +125,26 @@ func columnHeader(c overviewColumn, cellW int) string {
 	return truncate(title, cellW)
 }
 
+// runningNote describes the running timer below the table: how long it runs
+// and which columns count it. Naming the columns matters for billing — a timer
+// started before this week's boundary counts into letzte Woche, while the
+// diese Woche column an invoice is written from does not see it at all.
+func runningNote(state *watson.State, cols []overviewColumn, weekStart time.Weekday, now time.Time, projW int) string {
+	note := fmt.Sprintf("▶ %s läuft (%s)", truncate(state.Project, projW), formatClock(now.Sub(state.Start)))
+	var in []string
+	for _, c := range cols {
+		if runningInPeriod(state, c.per, weekStart) {
+			in = append(in, c.title)
+		}
+	}
+	if len(in) == 0 {
+		return note
+	}
+	// Second line: the column list is the billing-relevant part and must not
+	// compete with the project name for the terminal width.
+	return note + "\n  eingerechnet in: " + strings.Join(in, ", ")
+}
+
 // overviewView renders the billing overview (stateless). A running timer is
 // counted up to now and flagged below the table.
 func overviewView(frames []watson.Frame, state *watson.State, weekStart time.Weekday, now time.Time, width int) string {
@@ -155,8 +175,7 @@ func overviewView(frames []watson.Frame, state *watson.State, weekStart time.Wee
 	}
 	b.WriteString("\n" + styleTitle.Render(totalLine))
 	if state != nil {
-		b.WriteString("\n\n" + styleRunning.Render(fmt.Sprintf("▶ %s läuft (%s) und ist eingerechnet",
-			truncate(state.Project, projW), formatClock(now.Sub(state.Start)))))
+		b.WriteString("\n\n" + styleRunning.Render(runningNote(state, cols, weekStart, now, projW)))
 	}
 	b.WriteString("\n\n" + styleDim.Render("esc: zurück"))
 	return b.String()

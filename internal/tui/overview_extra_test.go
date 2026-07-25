@@ -88,6 +88,82 @@ func TestOverviewViewTruncatesProject(t *testing.T) {
 	}
 }
 
+// TestPeriodAttributionByStart pins the central billing rule for both money
+// facing views: a frame counts fully into the period it *starts* in and is
+// never split. The 31.07. 23:00 → 01.08. 02:00 session belongs to July with
+// all three hours; August must see nothing of it. An invoice depends on this.
+func TestPeriodAttributionByStart(t *testing.T) {
+	start := time.Date(2026, 7, 31, 23, 0, 0, 0, time.Local)
+	frames := []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "alpha", start, 3*time.Hour),
+	}
+
+	// buildOverview: mid-August "now", so dieser Monat = August (index 2) and
+	// letzter Monat = Juli (index 3); neither week column contains the frame.
+	now := time.Date(2026, 8, 15, 12, 0, 0, 0, time.Local)
+	cols := overviewColumns(now, time.Monday)
+	rows, totals := buildOverview(frames, cols, time.Monday)
+	if len(rows) != 1 {
+		t.Fatalf("got %d rows, want 1", len(rows))
+	}
+	want := []time.Duration{0, 0, 0, 3 * time.Hour, 3 * time.Hour}
+	for i := range want {
+		if rows[0].cells[i] != want[i] {
+			t.Errorf("column %q = %v, want %v", cols[i].title, rows[0].cells[i], want[i])
+		}
+		if totals[i] != want[i] {
+			t.Errorf("total %q = %v, want %v", cols[i].title, totals[i], want[i])
+		}
+	}
+
+	// aggregate: the same rule over month periods.
+	july := period{unit: unitMonth, ref: time.Date(2026, 7, 15, 12, 0, 0, 0, time.Local)}
+	lines, grand := aggregate(frames, july, time.Monday)
+	if grand != 3*time.Hour || len(lines) != 1 || lines[0].total != 3*time.Hour {
+		t.Errorf("Juli: grand=%v lines=%+v, want 3h on alpha", grand, lines)
+	}
+	august := period{unit: unitMonth, ref: now}
+	lines, grand = aggregate(frames, august, time.Monday)
+	if grand != 0 || len(lines) != 0 {
+		t.Errorf("August: grand=%v lines=%+v, want nothing", grand, lines)
+	}
+}
+
+// TestRunningNoteNamesColumns: the note must name the columns the running
+// frame actually lands in. A timer left running over the weekend counts into
+// letzte Woche — claiming it for the diese Woche column an invoice is written
+// from would overstate that week. The assertions run against runningNote
+// directly because the column titles also appear as table headers.
+func TestRunningNoteNamesColumns(t *testing.T) {
+	now := time.Date(2026, 7, 22, 12, 0, 0, 0, time.Local) // Mittwoch
+	cols := overviewColumns(now, time.Monday)
+
+	lastWeek := &watson.State{Project: "alpha", Start: time.Date(2026, 7, 18, 10, 0, 0, 0, time.Local), Tags: []string{}}
+	note := runningNote(lastWeek, cols, time.Monday, now, overviewProjMax)
+	if strings.Contains(note, "diese Woche") {
+		t.Errorf("timer from last week must not be claimed for diese Woche:\n%s", note)
+	}
+	for _, want := range []string{"alpha", "läuft", "eingerechnet in:", "letzte Woche", "dieser Monat", "gesamt"} {
+		if !strings.Contains(note, want) {
+			t.Errorf("note missing %q:\n%s", want, note)
+		}
+	}
+
+	thisWeek := &watson.State{Project: "alpha", Start: now.Add(-time.Hour), Tags: []string{}}
+	note = runningNote(thisWeek, cols, time.Monday, now, overviewProjMax)
+	if !strings.Contains(note, "diese Woche") {
+		t.Errorf("timer from today must be claimed for diese Woche:\n%s", note)
+	}
+	if strings.Contains(note, "letzte Woche") {
+		t.Errorf("timer from today must not be claimed for letzte Woche:\n%s", note)
+	}
+
+	out := overviewView(nil, lastWeek, time.Monday, now, 120)
+	if !strings.Contains(out, "eingerechnet in:") {
+		t.Errorf("view must disclose which columns count the timer:\n%s", out)
+	}
+}
+
 // TestOverviewCloseKeys: o and q close the overview just like esc does.
 func TestOverviewCloseKeys(t *testing.T) {
 	for _, k := range []string{"o", "q"} {

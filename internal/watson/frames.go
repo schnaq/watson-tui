@@ -25,7 +25,15 @@ type Frame struct {
 	UpdatedAt time.Time
 }
 
-func (f Frame) Duration() time.Duration { return f.Stop.Sub(f.Start) }
+// Duration is 0 for a frame without a usable stop. A foreign or hand-edited
+// frames file may carry stop=null (zero time) or a stop before start; the raw
+// difference would then be hugely negative and poison every billing sum.
+func (f Frame) Duration() time.Duration {
+	if f.Stop.IsZero() || f.Stop.Before(f.Start) {
+		return 0
+	}
+	return f.Stop.Sub(f.Start)
+}
 
 func (f Frame) ShortID() string {
 	if len(f.ID) < 7 {

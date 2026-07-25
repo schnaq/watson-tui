@@ -120,6 +120,38 @@ func TestSortFrames(t *testing.T) {
 	}
 }
 
+// TestParseFramesNullStop: the unmarshaller accepts stop=null (a frames file
+// written while a timer ran), which leaves the zero time. Such a frame must
+// contribute 0, never a negative duration that would eat other projects' sums.
+func TestParseFramesNullStop(t *testing.T) {
+	frames, err := ParseFrames([]byte(`[[1658000000,null,"p","9f3a2cf607e34b1c8f0e0c1234567890",[],1658000000]]`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(frames) != 1 {
+		t.Fatalf("got %d frames, want 1", len(frames))
+	}
+	if !frames[0].Stop.IsZero() {
+		t.Errorf("stop = %v, want zero time", frames[0].Stop)
+	}
+	if d := frames[0].Duration(); d != 0 {
+		t.Errorf("duration = %v, want 0", d)
+	}
+}
+
+func TestDuration(t *testing.T) {
+	start := time.Unix(1658000000, 0)
+	if d := (Frame{Start: start, Stop: start.Add(90 * time.Minute)}).Duration(); d != 90*time.Minute {
+		t.Errorf("normal frame = %v, want 1h30m", d)
+	}
+	if d := (Frame{Start: start}).Duration(); d != 0 {
+		t.Errorf("zero stop = %v, want 0", d)
+	}
+	if d := (Frame{Start: start, Stop: start.Add(-time.Hour)}).Duration(); d != 0 {
+		t.Errorf("stop before start = %v, want 0", d)
+	}
+}
+
 func TestShortID(t *testing.T) {
 	f := Frame{ID: "9f3a2cf607e34b1c8f0e0c1234567890"}
 	if f.ShortID() != "9f3a2cf" {

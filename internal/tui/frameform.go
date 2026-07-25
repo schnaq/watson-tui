@@ -12,13 +12,26 @@ import (
 	"github.com/schnaq/watson-tui/internal/watson"
 )
 
-const dtLayout = "2006-01-02 15:04"
+const (
+	dtLayout    = "2006-01-02 15:04"
+	dtLayoutSec = "2006-01-02 15:04:05"
+)
+
+// editLayout picks the pre-fill layout for an existing frame. Watson timestamps
+// carry seconds, so a minute-precision pre-fill would be re-parsed on save and
+// silently shorten the frame by up to a minute — even on a pure project rename.
+func editLayout(start, stop time.Time) string {
+	if start.Second() != 0 || stop.Second() != 0 {
+		return dtLayoutSec
+	}
+	return dtLayout
+}
 
 // parseDateTime accepts "2006-01-02 15:04[:05]" and "15:04" (= today), local time.
 func parseDateTime(s string, now time.Time) (time.Time, error) {
 	s = strings.TrimSpace(s)
 	loc := now.Location()
-	for _, layout := range []string{"2006-01-02 15:04:05", dtLayout} {
+	for _, layout := range []string{dtLayoutSec, dtLayout} {
 		if t, err := time.ParseInLocation(layout, s, loc); err == nil {
 			return t, nil
 		}
@@ -123,8 +136,10 @@ func newFormModel(existing *watson.Frame, frames []watson.Frame, now time.Time) 
 		m.editing = true
 		m.frameID = existing.ID
 		m.inputs[fieldProject].SetValue(existing.Project)
-		m.inputs[fieldStart].SetValue(existing.Start.Local().Format(dtLayout))
-		m.inputs[fieldStop].SetValue(existing.Stop.Local().Format(dtLayout))
+		start, stop := existing.Start.Local(), existing.Stop.Local()
+		layout := editLayout(start, stop)
+		m.inputs[fieldStart].SetValue(start.Format(layout))
+		m.inputs[fieldStop].SetValue(stop.Format(layout))
 		m.inputs[fieldTags].SetValue(strings.Join(existing.Tags, ", "))
 	} else {
 		m.inputs[fieldStart].SetValue(now.Add(-time.Hour).Format(dtLayout))

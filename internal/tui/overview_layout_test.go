@@ -46,11 +46,15 @@ func TestOverviewViewFitsWidth(t *testing.T) {
 		mkFrame("a1111111111111111111111111111111", "ein-langer-projektname-ueberlang", time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local), 123*time.Hour),
 		mkFrame("b2222222222222222222222222222222", "beta", time.Date(2026, 6, 10, 9, 0, 0, 0, time.Local), 2*time.Hour),
 	}
+	// A running timer adds the note below the table, which must fit too.
+	state := &watson.State{Project: "ein-langer-projektname-ueberlang", Start: now.Add(-3 * time.Hour), Tags: []string{}}
 	for _, width := range []int{120, 94, 80, 70} {
-		out := overviewView(frames, nil, time.Monday, now, width)
-		for _, line := range strings.Split(out, "\n") {
-			if w := lipgloss.Width(line); w > width {
-				t.Errorf("width %d: line is %d wide: %q", width, w, line)
+		for _, st := range []*watson.State{nil, state} {
+			out := overviewView(frames, st, time.Monday, now, width)
+			for _, line := range strings.Split(out, "\n") {
+				if w := lipgloss.Width(line); w > width {
+					t.Errorf("width %d: line is %d wide: %q", width, w, line)
+				}
 			}
 		}
 	}
