@@ -1,0 +1,182 @@
+package tui
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/schnaq/watson-tui/internal/watson"
+)
+
+// overviewColumn is one time-range column of the billing overview. short is
+// the header used when the column is too narrow for title.
+type overviewColumn struct {
+	title string
+	short string
+	per   period
+}
+
+// overviewColumns defines the fixed billing columns:
+// diese Woche, letzte Woche, dieser Monat, letzter Monat, gesamt.
+func overviewColumns(now time.Time, weekStart time.Weekday) []overviewColumn {
+	week := period{unit: unitWeek, ref: now}
+	month := period{unit: unitMonth, ref: now}
+	return []overviewColumn{
+		{"diese Woche", "Woche", week},
+		{"letzte Woche", "Vorwoche", week.shift(weekStart, -1)},
+		{"dieser Monat", "Monat", month},
+		{"letzter Monat", "Vormonat", month.shift(weekStart, -1)},
+		{"gesamt", "gesamt", period{unit: unitAll, ref: now}},
+	}
+}
+
+// overviewRow is one project's sums, one cell per column.
+type overviewRow struct {
+	project string
+	cells   []time.Duration
+}
+
+// buildOverview sums frame durations per project per column. Rows sort by
+// the last column (gesamt) descending, ties alphabetically. The second
+// return value holds the per-column totals.
+func buildOverview(frames []watson.Frame, cols []overviewColumn, weekStart time.Weekday) ([]overviewRow, []time.Duration) {
+	sums := map[string][]time.Duration{}
+	totals := make([]time.Duration, len(cols))
+	for _, fr := range frames {
+		row, ok := sums[fr.Project]
+		if !ok {
+			row = make([]time.Duration, len(cols))
+			sums[fr.Project] = row
+		}
+		d := fr.Duration()
+		for i, col := range cols {
+			from, to, bounded := col.per.bounds(weekStart)
+			if bounded && (fr.Start.Before(from) || !fr.Start.Before(to)) {
+				continue
+			}
+			row[i] += d
+			totals[i] += d
+		}
+	}
+	rows := make([]overviewRow, 0, len(sums))
+	for project, cells := range sums {
+		rows = append(rows, overviewRow{project: project, cells: cells})
+	}
+	last := len(cols) - 1
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].cells[last] != rows[j].cells[last] {
+			return rows[i].cells[last] > rows[j].cells[last]
+		}
+		return rows[i].project < rows[j].project
+	})
+	return rows, totals
+}
+
+// withRunning appends the running timer as a frame ending at now, so billing
+// sums include time that has not been stopped yet.
+func withRunning(frames []watson.Frame, state *watson.State, now time.Time) []watson.Frame {
+	if state == nil {
+		return frames
+	}
+	running := watson.Frame{Project: state.Project, Start: state.Start.Local(), Stop: now, Tags: state.Tags}
+	return append(append(make([]watson.Frame, 0, len(frames)+1), frames...), running)
+}
+
+// cellDuration renders one overview cell; zero shows as a dash.
+func cellDuration(d time.Duration) string {
+	if d == 0 {
+		return "–"
+	}
+	return formatDuration(d)
+}
+
+// Column widths of the overview table. The value columns shrink before the
+// project column does, because project names carry more information than the
+// two extra digits a wide cell allows for.
+const (
+	overviewProjMax = 24
+	overviewProjMin = 12
+	overviewCellMax = 13
+	overviewCellMin = 9 // fits "999h 59m"
+)
+
+// overviewLayout picks the project and value column widths for a terminal of
+// the given width and n value columns. Below the minimums the table simply
+// stays too wide — there is nothing sensible left to cut.
+func overviewLayout(width, n int) (projW, cellW int) {
+	projW, cellW = overviewProjMax, overviewCellMax
+	fits := func() bool { return projW+n*(cellW+1) <= width }
+	for !fits() && cellW > overviewCellMin {
+		cellW--
+	}
+	for !fits() && projW > overviewProjMin {
+		projW--
+	}
+	return projW, cellW
+}
+
+// columnHeader picks the longest header variant that fits cellW.
+func columnHeader(c overviewColumn, cellW int) string {
+	title := c.title
+	if len([]rune(title)) > cellW {
+		title = c.short
+	}
+	return truncate(title, cellW)
+}
+
+// runningNote describes the running timer below the table: how long it runs
+// and which columns count it. Naming the columns matters for billing — a timer
+// started before this week's boundary counts into letzte Woche, while the
+// diese Woche column an invoice is written from does not see it at all.
+func runningNote(state *watson.State, cols []overviewColumn, weekStart time.Weekday, now time.Time, projW int) string {
+	note := fmt.Sprintf("▶ %s läuft (%s)", truncate(state.Project, projW), formatClock(now.Sub(state.Start)))
+	var in []string
+	for _, c := range cols {
+		if runningInPeriod(state, c.per, weekStart) {
+			in = append(in, c.title)
+		}
+	}
+	if len(in) == 0 {
+		return note
+	}
+	// Second line: the column list is the billing-relevant part and must not
+	// compete with the project name for the terminal width.
+	return note + "\n  eingerechnet in: " + strings.Join(in, ", ")
+}
+
+// overviewView renders the billing overview (stateless). A running timer is
+// counted up to now and flagged below the table.
+func overviewView(frames []watson.Frame, state *watson.State, weekStart time.Weekday, now time.Time, width int) string {
+	cols := overviewColumns(now, weekStart)
+	rows, totals := buildOverview(withRunning(frames, state, now), cols, weekStart)
+	projW, cellW := overviewLayout(width, len(cols))
+
+	var b strings.Builder
+	b.WriteString(styleTitle.Render("Übersicht — Summen pro Projekt") + "\n\n")
+	fmt.Fprintf(&b, "%-*s", projW, truncate("Projekt", projW))
+	for _, c := range cols {
+		fmt.Fprintf(&b, " %*s", cellW, columnHeader(c, cellW))
+	}
+	b.WriteString("\n\n")
+	if len(rows) == 0 {
+		b.WriteString(styleDim.Render("keine Frames vorhanden") + "\n")
+	}
+	for _, r := range rows {
+		fmt.Fprintf(&b, "%-*s", projW, truncate(r.project, projW))
+		for _, d := range r.cells {
+			fmt.Fprintf(&b, " %*s", cellW, truncate(cellDuration(d), cellW))
+		}
+		b.WriteByte('\n')
+	}
+	totalLine := fmt.Sprintf("%-*s", projW, "Gesamt")
+	for _, d := range totals {
+		totalLine += fmt.Sprintf(" %*s", cellW, truncate(cellDuration(d), cellW))
+	}
+	b.WriteString("\n" + styleTitle.Render(totalLine))
+	if state != nil {
+		b.WriteString("\n\n" + styleRunning.Render(runningNote(state, cols, weekStart, now, projW)))
+	}
+	b.WriteString("\n\n" + styleDim.Render("esc: zurück"))
+	return b.String()
+}

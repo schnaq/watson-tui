@@ -1,0 +1,17 @@
+version: "2"
+
+linters:
+  settings:
+    staticcheck:
+      checks:
+        - all
+        # ST1005 wants lowercase, punctuation-free error strings. Our error
+        # strings are German UI text shown verbatim in the TUI, where nouns
+        # are capitalized ("Projekt fehlt").
+        - -ST1005
+
+# So `golangci-lint run` fails on unformatted code instead of leaving gofmt to
+# whoever happens to run it locally.
+formatters:
+  enable:
+    - gofmt

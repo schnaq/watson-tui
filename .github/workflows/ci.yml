@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Pull requests may carry code from forks, so they must not run on the
+# self-hosted runners: a workflow from a stranger's branch would execute on
+# gimli. Nothing here needs those machines — build, vet, test and lint are
+# plain Go. Pushes to main are already reviewed and stay on self-hosted, and
+# the release workflow builds on self-hosted as intended.
+
+jobs:
+  test:
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'self-hosted' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+      - run: go build ./...
+      - run: go vet ./...
+      - run: go test ./...
+
+  lint:
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'self-hosted' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+      - uses: golangci/golangci-lint-action@v8
+        with:
+          # Pinned: .golangci.yml enables staticcheck's full check set, so a
+          # newer release could redden the gate without a code change.
+          version: v2.12.2

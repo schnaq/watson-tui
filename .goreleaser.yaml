@@ -1,0 +1,47 @@
+version: 2
+
+project_name: watson-tui
+
+before:
+  hooks:
+    # download, not tidy: tidy can rewrite go.mod/go.sum mid-release, so the
+    # published binary would not match the dependency set CI tested.
+    - go mod download
+
+builds:
+  - main: ./cmd/watson-tui
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - formats: [tar.gz]
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github-native
+
+# Casks instead of the deprecated `brews`: GoReleaser removes formula support
+# in v2.16+. Casks are macOS-only — Linux users take the release archive.
+homebrew_casks:
+  - repository:
+      owner: schnaq
+      name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/schnaq/watson-tui
+    description: Schlanke Terminal-UI für Watson-Zeiterfassung
+    binaries: [watson-tui]
+    hooks:
+      post:
+        # The binary is neither signed nor notarized, so Gatekeeper would
+        # quarantine it on first run.
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/watson-tui"]
+          end
