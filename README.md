@@ -7,8 +7,12 @@ ist nicht nötig, vorhandene Daten funktionieren sofort weiter.
 ## Installation
 
 ```sh
-brew install --cask schnaq/tap/watson-tui
+brew tap schnaq/tap
+brew install --cask watson-tui
 ```
+
+Der Einzeiler `brew install --cask schnaq/tap/watson-tui` funktioniert auch, ist
+aber in Homebrew abgekündigt (siehe [Tap-Trust](https://docs.brew.sh/Tap-Trust)).
 
 Updates kommen über `brew upgrade`. Homebrew-Casks sind macOS-only; unter Linux
 das passende Archiv vom [Release](https://github.com/schnaq/watson-tui/releases)
