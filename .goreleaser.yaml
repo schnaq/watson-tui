@@ -4,7 +4,9 @@ project_name: watson-tui
 
 before:
   hooks:
-    - go mod tidy
+    # download, not tidy: tidy can rewrite go.mod/go.sum mid-release, so the
+    # published binary would not match the dependency set CI tested.
+    - go mod download
 
 builds:
   - main: ./cmd/watson-tui
