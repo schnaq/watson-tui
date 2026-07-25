@@ -5,9 +5,15 @@ on:
     branches: [main]
   pull_request:
 
+# Pull requests may carry code from forks, so they must not run on the
+# self-hosted runners: a workflow from a stranger's branch would execute on
+# gimli. Nothing here needs those machines — build, vet, test and lint are
+# plain Go. Pushes to main are already reviewed and stay on self-hosted, and
+# the release workflow builds on self-hosted as intended.
+
 jobs:
   test:
-    runs-on: self-hosted
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'self-hosted' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -18,7 +24,7 @@ jobs:
       - run: go test ./...
 
   lint:
-    runs-on: self-hosted
+    runs-on: ${{ github.event_name == 'pull_request' && 'ubuntu-latest' || 'self-hosted' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
