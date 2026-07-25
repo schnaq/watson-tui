@@ -380,7 +380,7 @@ func (a *App) View() string {
 	case modeForm:
 		body = a.form.view()
 	case modeReport:
-		body = a.report.view(a.frames, a.cfg.WeekStart)
+		body = a.report.view(a.frames, a.state, a.cfg.WeekStart, a.now)
 	case modeOverview:
 		body = overviewView(a.frames, a.state, a.cfg.WeekStart, a.now, a.width)
 	case modeStartTimer:

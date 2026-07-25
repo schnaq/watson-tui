@@ -60,17 +60,17 @@ Fertig und committet (`500761b`): `.goreleaser.yaml`, `.github/workflows/release
 
 - `goreleaser check` valide; Snapshot-Build lokal verifiziert (4 Archive darwin/linux × amd64/arm64, Cask generiert, `--version` gibt die injizierte Version aus).
 - **Plan-Abweichung:** Der Plan nutzt `brews:` — GoReleaser hat das in v2.16 entfernt. Stattdessen `homebrew_casks:` mit `binaries: [watson-tui]` und `postflight`-Hook, der das Quarantine-Flag entfernt (Binary ist unsigniert). Folgen: Installation ist `brew install --cask schnaq/tap/watson-tui`, Casks sind **macOS-only** (Linux → Release-Archiv), und die `test`-Stanza aus dem Plan fällt weg (Casks haben keine). goreleaser-action ist auf `~> v2.16` gepinnt.
-- Tap-Repo `schnaq/homebrew-tap` existiert, ist aber **leer (kein initialer Commit, kein default branch)**. Vor dem ersten Release prüfen, ob GoReleaser dorthin pushen kann — sonst einmal mit README initialisieren.
+- Tap-Repo `schnaq/homebrew-tap` existiert und hat einen default branch (`main`) — GoReleaser kann dorthin pushen.
+- `TAP_GITHUB_TOKEN` ist seit 2026-07-25 als Secret gesetzt (`gh secret list --repo schnaq/watson-tui`). Der Blocker ist damit weg.
 
-Offene Schritte (Plan Task 15, Steps 6 und 8–10):
+Offene Schritte (Plan Task 15, Steps 8–10):
 
-1. **USER ACTION, blockierend:** Fine-grained PAT für `schnaq/homebrew-tap` (Contents: Read+Write) erstellen und als Secret setzen: `gh secret set TAP_GITHUB_TOKEN --repo schnaq/watson-tui`. `gh secret list --repo schnaq/watson-tui` ist derzeit leer. STOPP bis Secret da ist.
-2. Tag `v0.1.0` pushen → `gh run watch --exit-status` → Release-Assets prüfen (4 tar.gz + checksums.txt) → `watson-tui.rb` im Tap unter `Casks/`.
-3. Smoke-Test: `brew install --cask schnaq/tap/watson-tui && watson-tui --version` → `watson-tui 0.1.0`.
+1. Tag `v0.1.0` pushen → `gh run watch --exit-status` → Release-Assets prüfen (4 tar.gz + checksums.txt) → `watson-tui.rb` im Tap unter `Casks/`.
+2. Smoke-Test: `brew install --cask schnaq/tap/watson-tui && watson-tui --version` → `watson-tui 0.1.0`.
 
 ## Nach Task 15: Abschluss
 
-1. **Final-Review** (whole-branch, fähigstes verfügbares Modell) über `git merge-base main HEAD`..HEAD — dabei die unten gesammelten Minor-Findings triagieren
+1. **Final-Review** über `e504482..HEAD` — das ist der nie reviewte Bereich (Tasks 1–13 hatten je ein Task-Review). Gesammelte Minor-Findings unten mit triagieren.
 2. Findings fixen (EIN Fix-Subagent mit kompletter Liste)
 3. Merge nach `main` (superpowers:finishing-a-development-branch), Linear-Issues final prüfen
 

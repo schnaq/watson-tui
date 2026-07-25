@@ -81,8 +81,24 @@ func newReportModel(now time.Time) reportModel {
 	return reportModel{per: period{unit: unitWeek, ref: now}}
 }
 
-func (m reportModel) view(frames []watson.Frame, weekStart time.Weekday) string {
-	lines, grand := aggregate(frames, m.per, weekStart)
+// runningInPeriod reports whether the frame withRunning appends is counted for
+// p, i.e. whether the running timer's start falls inside the period.
+func runningInPeriod(state *watson.State, p period, weekStart time.Weekday) bool {
+	if state == nil {
+		return false
+	}
+	from, to, bounded := p.bounds(weekStart)
+	if !bounded {
+		return true
+	}
+	start := state.Start.Local()
+	return !start.Before(from) && start.Before(to)
+}
+
+// view renders the report. A running timer counts up to now and is flagged
+// below the totals, matching the overview — both views inform billing.
+func (m reportModel) view(frames []watson.Frame, state *watson.State, weekStart time.Weekday, now time.Time) string {
+	lines, grand := aggregate(withRunning(frames, state, now), m.per, weekStart)
 	var b strings.Builder
 	b.WriteString(styleTitle.Render("Report — "+m.per.label(weekStart)) + "\n\n")
 	if len(lines) == 0 {
@@ -96,6 +112,10 @@ func (m reportModel) view(frames []watson.Frame, weekStart time.Weekday) string 
 		}
 	}
 	b.WriteString("\n" + styleTitle.Render(fmt.Sprintf("%-32s %10s", "Gesamt", formatDuration(grand))))
+	if runningInPeriod(state, m.per, weekStart) {
+		b.WriteString("\n\n" + styleRunning.Render(fmt.Sprintf("▶ %s läuft (%s) und ist eingerechnet",
+			truncate(state.Project, 32), formatClock(now.Sub(state.Start)))))
+	}
 	b.WriteString("\n\n" + styleDim.Render("t/w/m: Zeitraum · [ / ]: verschieben · esc: zurück"))
 	return b.String()
 }

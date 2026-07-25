@@ -50,7 +50,7 @@ func TestReportViewRenders(t *testing.T) {
 	frames := []watson.Frame{
 		mkFrame("a1111111111111111111111111111111", "alpha", day, 2*time.Hour, "code"),
 	}
-	out := reportModel{per: period{unit: unitWeek, ref: day}}.view(frames, time.Monday)
+	out := reportModel{per: period{unit: unitWeek, ref: day}}.view(frames, nil, time.Monday, day)
 	for _, want := range []string{"Report", "alpha", "[code]", "Gesamt", "2h 00m"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("view missing %q in:\n%s", want, out)
@@ -60,7 +60,7 @@ func TestReportViewRenders(t *testing.T) {
 
 // TestReportViewEmpty: empty period shows the hint line.
 func TestReportViewEmpty(t *testing.T) {
-	out := newReportModel(time.Now()).view(nil, time.Monday)
+	out := newReportModel(time.Now()).view(nil, nil, time.Monday, time.Now())
 	if !strings.Contains(out, "keine Frames im Zeitraum") {
 		t.Errorf("empty report must show hint, got:\n%s", out)
 	}
@@ -87,5 +87,30 @@ func TestReportKeysDayWeekForwardClose(t *testing.T) {
 	app.Update(key("q"))
 	if app.mode != modeList {
 		t.Error("q must return to list")
+	}
+}
+
+// TestReportCountsRunningTimer: the report is a money-facing view, so a running
+// timer counts up to now and is disclosed — same rule as the overview.
+func TestReportCountsRunningTimer(t *testing.T) {
+	now := time.Now()
+	state := &watson.State{Project: "laufend", Start: now.Add(-90 * time.Minute), Tags: []string{"live"}}
+	out := reportModel{per: period{unit: unitWeek, ref: now}}.view(nil, state, time.Monday, now)
+	for _, want := range []string{"laufend", "1h 30m", "eingerechnet"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("running timer missing %q in:\n%s", want, out)
+		}
+	}
+}
+
+// TestReportRunningTimerOutsidePeriod: a shifted period must not pick up the
+// running timer, because its start lies outside those bounds.
+func TestReportRunningTimerOutsidePeriod(t *testing.T) {
+	now := time.Now()
+	state := &watson.State{Project: "laufend", Start: now.Add(-30 * time.Minute), Tags: []string{}}
+	lastWeek := period{unit: unitWeek, ref: now}.shift(time.Monday, -1)
+	out := reportModel{per: lastWeek}.view(nil, state, time.Monday, now)
+	if strings.Contains(out, "laufend") {
+		t.Errorf("running timer must not appear in a past period:\n%s", out)
 	}
 }

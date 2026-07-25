@@ -46,10 +46,19 @@ beide — die Tag-Summen können deshalb größer sein als die Projektsumme. Sie
 beantworten „wie viel Zeit pro Tag", nicht „wie teilt sich das Projekt auf".
 
 Die Übersicht (`o`) ist für die Abrechnung: Summen pro Projekt über diese
-Woche, letzte Woche, diesen Monat, letzten Monat und gesamt. Ein laufender
-Timer zählt bis jetzt mit und wird unter der Tabelle ausgewiesen. Die Tabelle
-passt sich der Terminalbreite an; ab etwa 70 Spalten sind die Spaltentitel
-gekürzt.
+Woche, letzte Woche, diesen Monat, letzten Monat und gesamt. Die Tabelle passt
+sich der Terminalbreite an; ab etwa 70 Spalten sind die Spaltentitel gekürzt.
+
+**Wie Zeit einem Zeitraum zugeordnet wird** — relevant, wenn du daraus
+Rechnungen schreibst:
+
+- Ein Frame zählt vollständig in den Zeitraum, in dem er **beginnt**. Eine
+  Sitzung vom 31.07. 23:00 bis 01.08. 02:00 zählt also mit drei Stunden in den
+  Juli, nicht gesplittet. Watson selbst rechnet genauso.
+- Ein laufender Timer zählt bis jetzt mit und wird unter der Tabelle
+  ausgewiesen — in der Übersicht und im Report gleich.
+- Grundlage ist immer die lokale Zeitzone; der Wochenstart kommt aus Watsons
+  `config` (`[options] week_start`, Standard Montag).
 
 ## Entwicklung
 
