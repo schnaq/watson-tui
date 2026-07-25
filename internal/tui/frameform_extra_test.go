@@ -142,6 +142,58 @@ func TestEditRoundTripKeepsSeconds(t *testing.T) {
 	}
 }
 
+// TestFormViewShortFrameID: a foreign frames file may carry an ID shorter than
+// the seven chars the title shows. View() must not panic on it — a panic there
+// leaves the terminal in the alt-screen.
+func TestFormViewShortFrameID(t *testing.T) {
+	now := time.Now()
+	existing := watson.Frame{ID: "abc", Project: "p", Start: now.Add(-time.Hour), Stop: now, Tags: []string{}}
+	out := newFormModel(&existing, nil, now).view()
+	if !strings.Contains(out, "Frame bearbeiten (abc)") {
+		t.Errorf("short id must render verbatim: %q", out)
+	}
+}
+
+// TestOverlapWarningResetsOnEdit: after the warning the user may change the
+// frame. The next enter must re-check instead of saving a new, never-checked
+// overlap on the latched flag.
+func TestOverlapWarningResetsOnEdit(t *testing.T) {
+	store := watson.NewStore(t.TempDir())
+	if _, err := store.Add(watson.Frame{
+		Start:   time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local),
+		Stop:    time.Date(2026, 7, 20, 10, 0, 0, 0, time.Local),
+		Project: "bestehend", Tags: []string{},
+	}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	app := NewApp(store, "test")
+	app.Init()
+	app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	app.Update(key("n"))
+	app.form.inputs[fieldProject].SetValue("p")
+	app.form.inputs[fieldStart].SetValue("2026-07-20 09:30")
+	app.form.inputs[fieldStop].SetValue("2026-07-20 10:30")
+	app.Update(key("enter"))
+	if app.mode != modeForm || !app.form.warned {
+		t.Fatal("first submit must warn about overlap")
+	}
+	for i := 0; i < 3; i++ {
+		app.Update(key("tab")) // Projekt → Tags
+	}
+	app.Update(key("x")) // Feld geändert
+	if app.form.warned || app.form.errMsg != "" {
+		t.Errorf("changed field must re-arm the check, warned=%v errMsg=%q", app.form.warned, app.form.errMsg)
+	}
+	app.Update(key("enter"))
+	if app.mode != modeForm || !app.form.warned {
+		t.Fatalf("the still-overlapping frame must warn again, mode=%v", app.mode)
+	}
+	frames, _ := store.Frames()
+	if len(frames) != 1 {
+		t.Errorf("nothing must be saved yet, frames = %+v", frames)
+	}
+}
+
 // view renders both titles and the error line.
 func TestFormView(t *testing.T) {
 	newForm := newFormModel(nil, nil, time.Now())

@@ -62,8 +62,8 @@ func TestTimerStartAlreadyRunningError(t *testing.T) {
 		t.Fatal(err)
 	}
 	app.Update(key("enter"))
-	if app.mode != modeStartTimer || app.start.errMsg == "" {
-		t.Errorf("start error must stay in prompt with message, mode=%v errMsg=%q", app.mode, app.start.errMsg)
+	if app.mode != modeStartTimer || !strings.Contains(app.start.errMsg, "Start fehlgeschlagen") {
+		t.Errorf("start error must stay in prompt with a prefixed message, mode=%v errMsg=%q", app.mode, app.start.errMsg)
 	}
 }
 

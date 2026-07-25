@@ -163,7 +163,9 @@ func (m *formModel) setFocus(i int) {
 func (m formModel) view() string {
 	title := "Neuer Frame"
 	if m.editing {
-		title = "Frame bearbeiten (" + m.frameID[:7] + ")"
+		// ShortID instead of a slice: a foreign frames file may carry an ID
+		// shorter than 7 chars, and a panic in View() strands the alt-screen.
+		title = "Frame bearbeiten (" + (watson.Frame{ID: m.frameID}).ShortID() + ")"
 	}
 	labels := [fieldCount]string{"Projekt", "Start  ", "Stop   ", "Tags   "}
 	var b strings.Builder

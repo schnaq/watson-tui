@@ -165,13 +165,13 @@ func overviewView(frames []watson.Frame, state *watson.State, weekStart time.Wee
 	for _, r := range rows {
 		fmt.Fprintf(&b, "%-*s", projW, truncate(r.project, projW))
 		for _, d := range r.cells {
-			fmt.Fprintf(&b, " %*s", cellW, cellDuration(d))
+			fmt.Fprintf(&b, " %*s", cellW, truncate(cellDuration(d), cellW))
 		}
 		b.WriteByte('\n')
 	}
 	totalLine := fmt.Sprintf("%-*s", projW, "Gesamt")
 	for _, d := range totals {
-		totalLine += fmt.Sprintf(" %*s", cellW, cellDuration(d))
+		totalLine += fmt.Sprintf(" %*s", cellW, truncate(cellDuration(d), cellW))
 	}
 	b.WriteString("\n" + styleTitle.Render(totalLine))
 	if state != nil {

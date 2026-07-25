@@ -270,8 +270,15 @@ func (a *App) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter", "ctrl+s":
 		return a.submitForm()
 	}
+	before := a.form.inputs[a.form.focus].Value()
 	var cmd tea.Cmd
 	a.form.inputs[a.form.focus], cmd = a.form.inputs[a.form.focus].Update(msg)
+	if a.form.inputs[a.form.focus].Value() != before {
+		// A changed field invalidates the overlap warning: otherwise the next
+		// enter would save times that were never checked for overlap.
+		a.form.warned = false
+		a.form.errMsg = ""
+	}
 	return a, cmd
 }
 
@@ -330,7 +337,7 @@ func (a *App) updateStartTimer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return a, nil
 		}
 		if err := a.store.Start(project, splitTags(a.start.tags.Value()), time.Now()); err != nil {
-			a.start.errMsg = err.Error()
+			a.start.errMsg = "Start fehlgeschlagen: " + err.Error()
 			return a, nil
 		}
 		a.reload()

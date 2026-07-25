@@ -45,6 +45,9 @@ func TestOverviewViewFitsWidth(t *testing.T) {
 	frames := []watson.Frame{
 		mkFrame("a1111111111111111111111111111111", "ein-langer-projektname-ueberlang", time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local), 123*time.Hour),
 		mkFrame("b2222222222222222222222222222222", "beta", time.Date(2026, 6, 10, 9, 0, 0, 0, time.Local), 2*time.Hour),
+		// Several years of tracked time: "123456h 00m" is wider than a narrow
+		// value column, so the cell content has to be cut, not just padded.
+		mkFrame("c3333333333333333333333333333333", "langlaeufer", time.Date(2026, 7, 21, 9, 0, 0, 0, time.Local), 123456*time.Hour),
 	}
 	// A running timer adds the note below the table, which must fit too.
 	state := &watson.State{Project: "ein-langer-projektname-ueberlang", Start: now.Add(-3 * time.Hour), Tags: []string{}}
