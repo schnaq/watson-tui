@@ -59,7 +59,7 @@ Draft-PR [#1](https://github.com/schnaq/watson-tui/pull/1) `feature/watson-tui` 
 Fertig und committet (`500761b`): `.goreleaser.yaml`, `.github/workflows/release.yml`, `README.md`.
 
 - `goreleaser check` valide; Snapshot-Build lokal verifiziert (4 Archive darwin/linux × amd64/arm64, Cask generiert, `--version` gibt die injizierte Version aus).
-- **Plan-Abweichung:** Der Plan nutzt `brews:` — GoReleaser hat das in v2.16 entfernt. Stattdessen `homebrew_casks:` mit `binaries: [watson-tui]` und `postflight`-Hook, der das Quarantine-Flag entfernt (Binary ist unsigniert). Folgen: Installation ist `brew install --cask schnaq/tap/watson-tui`, Casks sind **macOS-only** (Linux → Release-Archiv), und die `test`-Stanza aus dem Plan fällt weg (Casks haben keine). goreleaser-action ist auf `~> v2.16` gepinnt.
+- **Plan-Abweichung:** Der Plan nutzt `brews:` — GoReleaser hat das in v2.16 entfernt. Stattdessen `homebrew_casks:` mit `binaries: [watson-tui]` und `postflight`-Hook, der das Quarantine-Flag entfernt (Binary ist unsigniert). Folgen: Installation ist `brew install --cask schnaq/tap/watson-tui`, Casks sind **macOS-only** (Linux → Release-Archiv), und die `test`-Stanza aus dem Plan fällt weg (Casks haben keine). goreleaser-action steht auf `~> v2.16` — das ist eine Untergrenze, kein Pin: jede spätere v2-Minor wird akzeptiert, 2.16 ist das Minimum wegen `homebrew_casks`.
 - Tap-Repo `schnaq/homebrew-tap` existiert und hat einen default branch (`main`) — GoReleaser kann dorthin pushen.
 - `TAP_GITHUB_TOKEN` ist seit 2026-07-25 als Secret gesetzt (`gh secret list --repo schnaq/watson-tui`). Der Blocker ist damit weg.
 
@@ -78,13 +78,13 @@ Offene Schritte (Plan Task 15, Steps 8–10):
 
 Behoben nach dem ersten Durchgang (Commit siehe `git log --oneline`): Übersicht ist breitenadaptiv, laufender Timer zählt mit und wird ausgewiesen, Statusbar zeigt in Report und Übersicht die eigene View, `truncate` hat einen Guard für `max<=0`, Tag-Semantik des Reports steht im README.
 
-- Task 3: null-stop-Pfad und `Duration()` ohne Testabdeckung (frames_test.go)
+Behoben im Final-Review-Durchgang (`33187ca`, `d1c074e`, `a6c7823`, `6ddaa06`), damit die Liste unten nicht mehr gegen den Code steht: Task 3 (null-stop-Pfad und `Duration()` getestet, `Duration()` liefert jetzt 0 statt eines negativen Werts), Task 10 (kompletter Punkt: Re-Check nach Feldänderung, `ShortID()` statt `frameID[:7]`, Sekunden überleben den Edit-Roundtrip), Task 12 (Start-Fehler hat den deutschen Prefix), Task 14 (`gofmt` läuft über den `formatters:`-Block in `.golangci.yml`). Zusätzlich: Attributionsregel per Test gepinnt, der Hinweis auf den laufenden Timer nennt die Spalten, in die er zählt, Übersichtszellen werden gekürzt statt nur gepolstert, `go mod download` statt `go mod tidy` im Release, Tests laufen vor dem Publish. Offen bleiben Task 7, 9, das Autocomplete-Accept aus Task 12 sowie 14/15 und 15.
+
 - Task 7: UTC-Constraint ohne Test-Teeth im Store; „never overwrite" nicht via Byte-Erhalt getestet; corrupt-config→Default ungetestet
 - Task 9: Scroll-Test rows>height fehlt; q-in-Filter-Regressionstest fehlt; g/G ohne Integrationstest
-- Task 10: `warned`-Flag ist One-Way-Latch (kein Re-Check nach Feldänderung); `frameID[:7]`-Panic theoretisch möglich; Sekunden gehen beim Edit-Roundtrip verloren (dtLayout minutengenau)
-- Task 12: Start-Fehler ohne deutschen Prefix in Prompt-errMsg; Autocomplete-Accept (right/ctrl+e) ungetestet
+- Task 12: Autocomplete-Accept (right/ctrl+e) ungetestet
 - Task 13/16: Übersicht rendert die Spaltenüberschriften erst ab ~94 Spalten voll; darunter greifen Kurztitel (`Vorwoche`/`Vormonat`) und ab ~70 Spalten schrumpft die Projektspalte. Unter 70 Spalten bleibt die Tabelle zu breit — kein Scrolling.
-- Task 14: CI prüft kein `gofmt`/`gci` — Formatverstöße fallen nur lokal auf (`gofmt -l .`)
+- Task 14: `gci` (Import-Gruppierung) ist weiter nicht geprüft — nur `gofmt`
 - Task 14/15: CI-Annotations melden Node-20-Deprecation für `actions/checkout@v4` und `actions/setup-go@v5` (werden auf Node 24 gezwungen) sowie einen fehlgeschlagenen Cache-Restore (`/usr/bin/tar` exit 2) auf dem Runner — beides nur Warnungen, Actions-Versionen beim nächsten Anlass hochziehen
 - Task 15: Release läuft auf `runs-on: self-hosted`, also auf gimli **oder** OpenSuse; `CGO_ENABLED=0` macht die Builds plattformunabhängig, aber der Cask-Push hängt am Runner-Netzzugang zu GitHub
 
