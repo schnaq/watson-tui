@@ -62,7 +62,7 @@ func TestBuildOverviewEmpty(t *testing.T) {
 // TestOverviewViewEmpty shows the placeholder instead of a bare header.
 func TestOverviewViewEmpty(t *testing.T) {
 	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
-	out := overviewView(nil, time.Monday, now)
+	out := overviewView(nil, nil, time.Monday, now, 120)
 	if !strings.Contains(out, "keine Frames vorhanden") {
 		t.Errorf("empty overview missing placeholder:\n%s", out)
 	}
@@ -79,7 +79,7 @@ func TestOverviewViewTruncatesProject(t *testing.T) {
 	frames := []watson.Frame{
 		mkFrame("a1111111111111111111111111111111", long, time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local), time.Hour),
 	}
-	out := overviewView(frames, time.Monday, now)
+	out := overviewView(frames, nil, time.Monday, now, 120)
 	if strings.Contains(out, long) {
 		t.Errorf("long project name not truncated:\n%s", out)
 	}

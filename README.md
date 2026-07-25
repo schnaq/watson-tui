@@ -47,7 +47,9 @@ beantworten „wie viel Zeit pro Tag", nicht „wie teilt sich das Projekt auf".
 
 Die Übersicht (`o`) ist für die Abrechnung: Summen pro Projekt über diese
 Woche, letzte Woche, diesen Monat, letzten Monat und gesamt. Ein laufender
-Timer zählt erst mit, wenn er gestoppt ist.
+Timer zählt bis jetzt mit und wird unter der Tabelle ausgewiesen. Die Tabelle
+passt sich der Terminalbreite an; ab etwa 70 Spalten sind die Spaltentitel
+gekürzt.
 
 ## Entwicklung
 

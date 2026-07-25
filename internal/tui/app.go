@@ -348,6 +348,12 @@ func (a *App) updateStartTimer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 // statusLeft is the view-specific left segment of the status bar.
 func (a *App) statusLeft() string {
+	switch a.mode {
+	case modeOverview:
+		return "Übersicht · Abrechnung"
+	case modeReport:
+		return "Report · " + a.report.per.label(a.cfg.WeekStart)
+	}
 	n := 0
 	for _, r := range a.list.rows {
 		if !r.isHeader {
@@ -376,7 +382,7 @@ func (a *App) View() string {
 	case modeReport:
 		body = a.report.view(a.frames, a.cfg.WeekStart)
 	case modeOverview:
-		body = overviewView(a.frames, a.cfg.WeekStart, a.now)
+		body = overviewView(a.frames, a.state, a.cfg.WeekStart, a.now, a.width)
 	case modeStartTimer:
 		body = a.start.view()
 	case modeConfirmCancel:

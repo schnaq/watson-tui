@@ -76,15 +76,14 @@ Offene Schritte (Plan Task 15, Steps 6 und 8–10):
 
 ## Gesammelte Minor-Findings für den Final-Review
 
+Behoben nach dem ersten Durchgang (Commit siehe `git log --oneline`): Übersicht ist breitenadaptiv, laufender Timer zählt mit und wird ausgewiesen, Statusbar zeigt in Report und Übersicht die eigene View, `truncate` hat einen Guard für `max<=0`, Tag-Semantik des Reports steht im README.
+
 - Task 3: null-stop-Pfad und `Duration()` ohne Testabdeckung (frames_test.go)
 - Task 7: UTC-Constraint ohne Test-Teeth im Store; „never overwrite" nicht via Byte-Erhalt getestet; corrupt-config→Default ungetestet
-- Task 9: Scroll-Test rows>height fehlt; q-in-Filter-Regressionstest fehlt; g/G ohne Integrationstest; `truncate` panict bei max<=0 (defensive guard einbauen)
+- Task 9: Scroll-Test rows>height fehlt; q-in-Filter-Regressionstest fehlt; g/G ohne Integrationstest
 - Task 10: `warned`-Flag ist One-Way-Latch (kein Re-Check nach Feldänderung); `frameID[:7]`-Panic theoretisch möglich; Sekunden gehen beim Edit-Roundtrip verloren (dtLayout minutengenau)
 - Task 12: Start-Fehler ohne deutschen Prefix in Prompt-errMsg; Autocomplete-Accept (right/ctrl+e) ungetestet
-- Task 13: Statusbar zeigt im Report die Listen-Periode; Tag-Summen > Projektsumme bei Mehrfach-Tags (als „Zeit pro Tag" dokumentieren, z. B. im README)
-- Task 16: Zeilenbreite der Übersicht ist fix ~94 Spalten (24 + 5×14), ohne Umbruch-/Scroll-Handling — bricht auf 80-Spalten-Terminals um (`App`-Default ist width 80)
-- Task 16: laufender Timer fehlt in den Summen (`overviewView` liest nur `a.frames`, nicht `a.state`) — in der Abrechnung ggf. überraschend
-- Task 16: Statusbar zeigt in der Übersicht weiter die Listen-Periode (gleiches Muster wie Task 13)
+- Task 13/16: Übersicht rendert die Spaltenüberschriften erst ab ~94 Spalten voll; darunter greifen Kurztitel (`Vorwoche`/`Vormonat`) und ab ~70 Spalten schrumpft die Projektspalte. Unter 70 Spalten bleibt die Tabelle zu breit — kein Scrolling.
 - Task 14: CI prüft kein `gofmt`/`gci` — Formatverstöße fallen nur lokal auf (`gofmt -l .`)
 - Task 14/15: CI-Annotations melden Node-20-Deprecation für `actions/checkout@v4` und `actions/setup-go@v5` (werden auf Node 24 gezwungen) sowie einen fehlgeschlagenen Cache-Restore (`/usr/bin/tar` exit 2) auf dem Runner — beides nur Warnungen, Actions-Versionen beim nächsten Anlass hochziehen
 - Task 15: Release läuft auf `runs-on: self-hosted`, also auf gimli **oder** OpenSuse; `CGO_ENABLED=0` macht die Builds plattformunabhängig, aber der Cask-Push hängt am Runner-Netzzugang zu GitHub

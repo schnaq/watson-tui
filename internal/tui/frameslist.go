@@ -180,6 +180,12 @@ func truncate(s string, max int) string {
 	if len(r) <= max {
 		return s
 	}
+	if max <= 1 {
+		if max <= 0 {
+			return ""
+		}
+		return "…"
+	}
 	return string(r[:max-1]) + "…"
 }
 
