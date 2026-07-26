@@ -72,12 +72,12 @@ func TestSelectedRowCarriesMarker(t *testing.T) {
 			}},
 		},
 	}
-	selected := l.renderRow(1)
+	selected := l.renderRow(1, 7)
 	if !strings.Contains(selected, selectionMarker) {
 		t.Errorf("selected row lacks %q marker:\n%s", selectionMarker, selected)
 	}
 	l.cursor = -1
-	if plain := l.renderRow(1); strings.Contains(plain, selectionMarker) {
+	if plain := l.renderRow(1, 7); strings.Contains(plain, selectionMarker) {
 		t.Errorf("unselected row must not carry the marker:\n%s", plain)
 	}
 	if styleSelected.GetReverse() {

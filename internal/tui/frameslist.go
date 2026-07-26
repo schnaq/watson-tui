@@ -266,8 +266,10 @@ func (l *listModel) view(height int) string {
 	if end > len(l.rows) {
 		end = len(l.rows)
 	}
+	// One duration width for the whole list, computed once: see listDurWidth.
+	durW := listDurWidth(l.rows)
 	for i := l.offset; i < end; i++ {
-		b.WriteString(l.renderRow(i))
+		b.WriteString(l.renderRow(i, durW))
 		if i < end-1 {
 			b.WriteByte('\n')
 		}
@@ -275,7 +277,27 @@ func (l *listModel) view(height int) string {
 	return b.String()
 }
 
-func (l *listModel) renderRow(i int) string {
+// listDurWidth is the width the duration column needs: the widest duration the
+// list renders. Data-driven like report.go's number column, because the field was
+// a fixed %7s and "130h 00m" is eight columns — so every row with a three-digit
+// hour count pushed the columns behind it one to the right, and the frame ID sits
+// in the last of them, where a line one column too long loses characters to
+// fitBody. A few weeks on one frame or the a (all) period is enough to hit that.
+//
+// Computed over every frame row of the list, not only the visible ones, so
+// scrolling does not move the columns under the reader.
+func listDurWidth(rows []row) int {
+	w := 0
+	for _, r := range rows {
+		if r.isHeader {
+			continue
+		}
+		w = max(w, len(formatDuration(r.frame.Duration())))
+	}
+	return w
+}
+
+func (l *listModel) renderRow(i, durW int) string {
 	r := l.rows[i]
 	if r.isHeader {
 		return styleDayHeader.Render(r.title)
@@ -285,11 +307,11 @@ func (l *listModel) renderRow(i int) string {
 	if i == l.cursor {
 		prefix = selectionMarker + " "
 	}
-	line := fmt.Sprintf("%s%s–%s  %7s  %-24s %-28s %s",
+	line := fmt.Sprintf("%s%s–%s  %*s  %-24s %-28s %s",
 		prefix,
 		fr.Start.Local().Format("15:04"),
 		fr.Stop.Local().Format("15:04"),
-		formatDuration(fr.Duration()),
+		durW, formatDuration(fr.Duration()),
 		truncate(fr.Project, 24),
 		truncate(strings.Join(fr.Tags, ", "), 28),
 		fr.ShortID())
