@@ -102,8 +102,7 @@ const (
 )
 
 // overviewLayout picks the project and value column widths for a terminal of
-// the given width and n value columns. Below the minimums the table simply
-// stays too wide — there is nothing sensible left to cut.
+// the given width and n value columns.
 func overviewLayout(width, n int) (projW, cellW int) {
 	projW, cellW = overviewProjMax, overviewCellMax
 	fits := func() bool { return projW+n*(cellW+1) <= width }
@@ -113,7 +112,66 @@ func overviewLayout(width, n int) (projW, cellW int) {
 	for !fits() && projW > overviewProjMin {
 		projW--
 	}
+	// Last resort, below the project minimum: the caller has already dropped
+	// every value column it may drop, so the only thing left to give is name
+	// width. A cut project name keeps its ellipsis and reads as cut; a cut value
+	// column would not — see overviewFit.
+	for !fits() && projW > 1 {
+		projW--
+	}
 	return projW, cellW
+}
+
+// overviewDropOrder lists the value columns in the order they are given up on a
+// narrow terminal: least useful for writing an invoice first. gesamt is not in
+// the list, so it is the column that always survives.
+var overviewDropOrder = []int{1, 3, 2, 0} // letzte Woche, letzter Monat, dieser Monat, diese Woche
+
+// overviewFit decides which value columns the table shows and how wide its
+// columns are. A column that no longer fits its minimum is dropped whole
+// instead of being narrowed: the cells are right-aligned, so a too-narrow table
+// gets clipped on the right and the clip eats the least significant digits —
+// "4h 02m" renders as "4h 0", a plausible wrong number in the one view an
+// invoice is written from. Dropped columns are named below the table
+// (droppedNote), so a missing column is never silent.
+//
+// keep and dropped are column indices into the caller's column slice, both in
+// display order; the sums themselves are always computed for every column, so
+// what is dropped is only the rendering.
+func overviewFit(width, n int) (keep, dropped []int, projW, cellW int) {
+	keep = make([]int, 0, n)
+	for i := 0; i < n; i++ {
+		keep = append(keep, i)
+	}
+	// The minimums decide: as long as the narrowest legible table fits, nothing
+	// is dropped and overviewLayout hands out whatever extra room there is.
+	fits := func() bool { return overviewProjMin+len(keep)*(overviewCellMin+1) <= width }
+	for _, drop := range overviewDropOrder {
+		if fits() || len(keep) <= 1 {
+			break
+		}
+		for i, idx := range keep {
+			if idx == drop {
+				keep = append(keep[:i], keep[i+1:]...)
+				dropped = append(dropped, idx)
+				break
+			}
+		}
+	}
+	sort.Ints(dropped)
+	projW, cellW = overviewLayout(width, len(keep))
+	return keep, dropped, projW, cellW
+}
+
+// droppedNote names the columns overviewFit gave up. In column order, the order
+// they would have been read in — the drop order is an internal priority and
+// would put the names in a sequence the table never had.
+func droppedNote(cols []overviewColumn, dropped []int) string {
+	names := make([]string, 0, len(dropped))
+	for _, i := range dropped {
+		names = append(names, cols[i].title)
+	}
+	return "zu schmal für: " + strings.Join(names, ", ")
 }
 
 // columnHeader picks the longest header variant that fits cellW.
@@ -150,13 +208,13 @@ func runningNote(state *watson.State, cols []overviewColumn, weekStart time.Week
 func overviewView(frames []watson.Frame, state *watson.State, weekStart time.Weekday, now time.Time, width int) string {
 	cols := overviewColumns(now, weekStart)
 	rows, totals := buildOverview(withRunning(frames, state, now), cols, weekStart)
-	projW, cellW := overviewLayout(width, len(cols))
+	keep, dropped, projW, cellW := overviewFit(width, len(cols))
 
 	var b strings.Builder
 	b.WriteString(styleTitle.Render("Übersicht — Summen pro Projekt") + "\n\n")
 	fmt.Fprintf(&b, "%-*s", projW, truncate("Projekt", projW))
-	for _, c := range cols {
-		fmt.Fprintf(&b, " %*s", cellW, columnHeader(c, cellW))
+	for _, i := range keep {
+		fmt.Fprintf(&b, " %*s", cellW, columnHeader(cols[i], cellW))
 	}
 	b.WriteString("\n\n")
 	if len(rows) == 0 {
@@ -164,16 +222,22 @@ func overviewView(frames []watson.Frame, state *watson.State, weekStart time.Wee
 	}
 	for _, r := range rows {
 		fmt.Fprintf(&b, "%-*s", projW, truncate(r.project, projW))
-		for _, d := range r.cells {
-			fmt.Fprintf(&b, " %*s", cellW, truncate(cellDuration(d), cellW))
+		for _, i := range keep {
+			fmt.Fprintf(&b, " %*s", cellW, truncate(cellDuration(r.cells[i]), cellW))
 		}
 		b.WriteByte('\n')
 	}
 	totalLine := fmt.Sprintf("%-*s", projW, "Gesamt")
-	for _, d := range totals {
-		totalLine += fmt.Sprintf(" %*s", cellW, truncate(cellDuration(d), cellW))
+	for _, i := range keep {
+		totalLine += fmt.Sprintf(" %*s", cellW, truncate(cellDuration(totals[i]), cellW))
 	}
 	b.WriteString("\n" + styleTitle.Render(totalLine))
+	if len(dropped) > 0 {
+		// Wrapped, not cut: the note is the only trace a dropped column leaves,
+		// and on the narrow terminal that dropped it the list of names is
+		// longer than the line.
+		b.WriteString("\n\n" + styleDim.Width(width).Render(droppedNote(cols, dropped)))
+	}
 	if state != nil {
 		b.WriteString("\n\n" + styleRunning.Render(runningNote(state, cols, weekStart, now, projW)))
 	}

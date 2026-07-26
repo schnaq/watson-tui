@@ -1,10 +1,12 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/schnaq/watson-tui/internal/watson"
 )
@@ -23,6 +25,134 @@ func TestOverviewLayoutFitsWidth(t *testing.T) {
 		}
 		if projW < overviewProjMin {
 			t.Errorf("width %d: project width %d below minimum %d", width, projW, overviewProjMin)
+		}
+	}
+}
+
+// TestOverviewFitNeverExceedsWidth: whatever overviewFit keeps has to fit the
+// width it was given, down to the narrowest terminal where a project column and
+// one value column still go side by side (11 columns). The property is what
+// protects the numbers: as long as the table fits, no line is ever clipped, and
+// an unclipped right-aligned cell cannot lose its least significant digits.
+func TestOverviewFitNeverExceedsWidth(t *testing.T) {
+	const n = 5
+	for width := 11; width <= 140; width++ {
+		keep, dropped, projW, cellW := overviewFit(width, n)
+		if len(keep) == 0 {
+			t.Fatalf("width %d: every column dropped", width)
+		}
+		if keep[len(keep)-1] != n-1 {
+			t.Errorf("width %d: kept %v, gesamt (%d) must be the last column standing",
+				width, keep, n-1)
+		}
+		if total := projW + len(keep)*(cellW+1); total > width {
+			t.Errorf("width %d: %d kept columns need %d columns (proj=%d cell=%d)",
+				width, len(keep), total, projW, cellW)
+		}
+		if cellW < overviewCellMin {
+			t.Errorf("width %d: cell width %d below the minimum %d — a value column "+
+				"must be dropped, never squeezed", width, cellW, overviewCellMin)
+		}
+		if len(keep)+len(dropped) != n {
+			t.Errorf("width %d: %d kept + %d dropped != %d columns", width, len(keep), len(dropped), n)
+		}
+	}
+}
+
+// TestOverviewNarrowKeepsExactDurations is the regression for the worst defect
+// this view can have: at 60 columns the table used to run two columns past the
+// terminal, App.View clipped the overhang, and because the cells are
+// right-aligned the clip ate the last digits of a duration without leaving an
+// ellipsis — "4h 02m" rendered as "4h 0". Every value that is on screen must be
+// exactly what buildOverview computed, so the assertions are whole lines
+// rebuilt from its output, not substring checks: a project's row carries the
+// same value in several columns, so "4h 02m appears somewhere" passes even when
+// the wrong columns are shown.
+func TestOverviewNarrowKeepsExactDurations(t *testing.T) {
+	const width = 60
+	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
+	monday := time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local)
+	frames := []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "kunde-a", monday, 4*time.Hour+2*time.Minute),
+		mkFrame("b2222222222222222222222222222222", "schnaq", monday.Add(6*time.Hour), 30*time.Minute),
+	}
+	cols := overviewColumns(now, time.Monday)
+	rows, totals := buildOverview(frames, cols, time.Monday)
+	keep, _, projW, cellW := overviewFit(width, len(cols))
+
+	app := newTestApp(t)
+	app.Update(tea.WindowSizeMsg{Width: width, Height: 30})
+	app.frames = frames
+	app.now = now
+	app.mode = modeOverview
+	out := app.View()
+
+	row := func(label string, cells []time.Duration) string {
+		s := fmt.Sprintf("%-*s", projW, truncate(label, projW))
+		for _, i := range keep {
+			s += fmt.Sprintf(" %*s", cellW, truncate(cellDuration(cells[i]), cellW))
+		}
+		return s
+	}
+	for _, r := range rows {
+		if want := row(r.project, r.cells); !strings.Contains(out, want) {
+			t.Errorf("row %q is not rendered as computed:\nwant %q\ngot\n%s", r.project, want, out)
+		}
+	}
+	if want := row("Gesamt", totals); !strings.Contains(out, want) {
+		t.Errorf("total row is not rendered as computed:\nwant %q\ngot\n%s", want, out)
+	}
+	// The digits themselves, spelled out: a clipped cell loses the tail, so
+	// these are the exact strings an invoice is written from.
+	for _, want := range []string{"4h 02m", "30m", "4h 32m"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("value %q missing from the overview:\n%s", want, out)
+		}
+	}
+	for i, line := range strings.Split(out, "\n") {
+		if w := lipgloss.Width(line); w > width {
+			t.Errorf("line %d is %d wide, want <= %d: %q", i, w, width, line)
+		}
+	}
+}
+
+// TestOverviewNamesDroppedColumns: a column that does not fit is dropped whole,
+// so the view has to say so. Otherwise an empty screen reads as "no time booked
+// last week" when it means "last week is not on screen".
+func TestOverviewNamesDroppedColumns(t *testing.T) {
+	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
+	frames := []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "kunde-a",
+			time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local), 4*time.Hour),
+	}
+	cols := overviewColumns(now, time.Monday)
+
+	// Wide enough for all five: no note at all.
+	if out := overviewView(frames, nil, time.Monday, now, 120); strings.Contains(out, "zu schmal") {
+		t.Errorf("nothing is dropped at 120 columns, so there must be no note:\n%s", out)
+	}
+	// At 60 exactly one column goes, and the note fits a line, so it has to
+	// stand in the rendered view word for word.
+	if out := overviewView(frames, nil, time.Monday, now, 60); !strings.Contains(out, "zu schmal für: letzte Woche") {
+		t.Errorf("60 columns must name the dropped column:\n%s", out)
+	}
+	// Narrower still: the note wraps, so the column names are asserted against
+	// droppedNote — the same reason TestRunningNoteNamesColumns goes to the
+	// note function instead of the rendered table.
+	for _, width := range []int{60, 45, 30} {
+		_, dropped, _, _ := overviewFit(width, len(cols))
+		if len(dropped) == 0 {
+			t.Fatalf("width %d: expected the layout to drop a column", width)
+		}
+		note := droppedNote(cols, dropped)
+		for _, i := range dropped {
+			if !strings.Contains(note, cols[i].title) {
+				t.Errorf("width %d: note %q does not name the dropped column %q",
+					width, note, cols[i].title)
+			}
+		}
+		if out := overviewView(frames, nil, time.Monday, now, width); !strings.Contains(out, "zu schmal für:") {
+			t.Errorf("width %d: dropped %v without saying so:\n%s", width, dropped, out)
 		}
 	}
 }
@@ -51,7 +181,10 @@ func TestOverviewViewFitsWidth(t *testing.T) {
 	}
 	// A running timer adds the note below the table, which must fit too.
 	state := &watson.State{Project: "ein-langer-projektname-ueberlang", Start: now.Add(-3 * time.Hour), Tags: []string{}}
-	for _, width := range []int{120, 94, 80, 70} {
+	// 60 is the width below which all five value columns no longer fit their own
+	// minimums, so it is where the table has to give a column up instead of
+	// letting the line run past the terminal and be clipped.
+	for _, width := range []int{120, 94, 80, 70, 60} {
 		for _, st := range []*watson.State{nil, state} {
 			out := overviewView(frames, st, time.Monday, now, width)
 			for _, line := range strings.Split(out, "\n") {
