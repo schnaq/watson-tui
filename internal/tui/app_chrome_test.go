@@ -293,3 +293,50 @@ func TestQuitKeyIsReachableOnAShortTerminal(t *testing.T) {
 		}
 	}
 }
+
+// TestViewFillsTheTerminal: the frame has to reach the bottom of the screen.
+// fitBody used to cut a body that was too long but never pad one that was too
+// short, so three frames at 100x30 drew a 12-line box with the footer floating
+// mid-screen and 18 blank rows below it — the single thing that made this look
+// unfinished next to k9s or lazygit. The upper bound stays pinned by
+// TestViewBudgetsHeight; this is the lower one.
+func TestViewFillsTheTerminal(t *testing.T) {
+	now := time.Now()
+	frames := []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "alpha", now.Add(-3*time.Hour), time.Hour),
+		mkFrame("b2222222222222222222222222222222", "beta", now.Add(-2*time.Hour), time.Hour),
+	}
+	const width, height = 100, 30
+	for _, m := range chromeModes {
+		app := chromeApp(t, now, width, height, frames)
+		app.mode = m
+		out := app.View()
+		if lines := strings.Count(out, "\n") + 1; lines != height {
+			t.Errorf("mode %d at %dx%d: view has %d lines, want exactly %d:\n%s",
+				m, width, height, lines, height, out)
+		}
+	}
+}
+
+// TestViewFillsEveryTerminalItFits: the same lower bound across both collapse
+// thresholds and both extremes of the width sweep. Together with
+// TestViewBudgetsHeight this pins the height to exactly the terminal — the frame
+// may neither scroll the alt screen nor leave rows unclaimed at the bottom.
+func TestViewFillsEveryTerminalItFits(t *testing.T) {
+	now := time.Now()
+	frames := []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "alpha", now.Add(-3*time.Hour), time.Hour),
+	}
+	for _, width := range chromeWidths {
+		for _, height := range chromeHeights {
+			for _, m := range chromeModes {
+				app := chromeApp(t, now, width, height, frames)
+				app.mode = m
+				if lines := strings.Count(app.View(), "\n") + 1; lines != height {
+					t.Errorf("mode %d at %dx%d: view has %d lines, want exactly %d",
+						m, width, height, lines, height)
+				}
+			}
+		}
+	}
+}

@@ -225,9 +225,14 @@ func spread(left, right string, width int) string {
 	return left + strings.Repeat(" ", gap) + right
 }
 
-// fitBody cuts body down to maxLines lines of at most maxWidth columns, so the
-// panel around it cannot grow past the height App.View budgeted for it. The
-// views hand out pre-styled lines, so the cut counts printable columns
+// fitBody fits body to exactly maxLines lines of at most maxWidth columns, so
+// the panel around it neither grows past the height App.View budgeted for it nor
+// shrink-wraps around its content. Padding matters as much as cutting: a
+// bordered box drawn around three rows with the footer floating in the middle of
+// the screen is what makes a TUI look unfinished — k9s and lazygit fill the
+// viewport, and so the panel bottom sits just above the footer here.
+//
+// The views hand out pre-styled lines, so the cut counts printable columns
 // (clipWidth) instead of runes — see there for why. Lines go from the bottom:
 // letting the terminal scroll instead would push the header off the top, and the
 // head of a view is the part that says what one is looking at.
@@ -243,6 +248,11 @@ func fitBody(body string, maxLines, maxWidth int) string {
 	}
 	for i, line := range lines {
 		lines[i] = clipWidth(line, maxWidth)
+	}
+	// Empty lines, not spaces: panel pads every row to its inner width anyway,
+	// and the unframed overview has nothing to gain from trailing blanks.
+	for len(lines) < maxLines {
+		lines = append(lines, "")
 	}
 	return strings.Join(lines, "\n")
 }
