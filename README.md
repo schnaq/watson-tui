@@ -39,6 +39,13 @@ laden (`linux_amd64` oder `linux_arm64`) und `watson-tui` in den `PATH` legen.
 | `?` | Hilfe |
 | `q` | beenden |
 
+Die Oberfläche nutzt die ANSI-Farben deines Terminal-Themes: Kontext-Header
+oben, gerahmtes Hauptpanel, Tastenhinweise unten. Ab 20 Terminalzeilen ist der
+Header gerahmt, zwischen 12 und 19 Zeilen klappt er auf eine Zeile ein, unter 12
+verschwindet er — die Liste behält den Platz. Passen nicht alle Tastenhinweise in
+die Breite, fallen die hinteren ganz weg statt mitten im Wort zu enden; `?` zeigt
+immer die vollständige Belegung.
+
 Datenverzeichnis: `$WATSON_DIR`, sonst OS-Standard
 (macOS: `~/Library/Application Support/watson`). Override: `--dir PFAD`.
 
@@ -53,7 +60,9 @@ Die Übersicht (`o`) ist für die Abrechnung: Summen pro Projekt über diese
 Woche, letzte Woche, diesen Monat, letzten Monat und gesamt. Die Tabelle passt
 sich der Terminalbreite an: unter etwa 94 Spalten werden die Spaltentitel
 gekürzt (`Vorwoche`, `Vormonat`), unter etwa 70 schrumpft zusätzlich die
-Projektspalte. Darunter bleibt die Tabelle zu breit — es gibt kein Scrolling.
+Projektspalte. Unter etwa 62 Spalten fallen ganze Wert-Spalten weg — welche,
+steht über der Tabelle; `gesamt` bleibt immer stehen. So wird keine Dauer
+abgeschnitten.
 
 **Wie Zeit einem Zeitraum zugeordnet wird** — relevant, wenn du daraus
 Rechnungen schreibst:
