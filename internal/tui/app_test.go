@@ -55,8 +55,13 @@ func TestHelpToggle(t *testing.T) {
 	if app.mode != modeHelp {
 		t.Fatal("? must open help")
 	}
-	if !strings.Contains(app.View(), "Tasten") {
-		t.Error("help view missing title")
+	// The panel title names the view; the body is the key list itself.
+	out := app.View()
+	if !strings.Contains(out, panelTitle(modeHelp)) {
+		t.Errorf("help panel missing its title:\n%s", out)
+	}
+	if !strings.Contains(out, "neuer Frame") {
+		t.Errorf("help view missing the key list:\n%s", out)
 	}
 	app.Update(key("x"))
 	if app.mode != modeList {

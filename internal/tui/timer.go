@@ -34,7 +34,6 @@ func newStartModel(frames []watson.Frame) startModel {
 
 func (m startModel) view() string {
 	var b strings.Builder
-	b.WriteString(styleTitle.Render("Timer starten") + "\n\n")
 	cursors := [2]string{"  ", "  "}
 	cursors[m.focus] = "> "
 	b.WriteString(cursors[0] + "Projekt " + m.project.View() + "\n")
@@ -42,6 +41,5 @@ func (m startModel) view() string {
 	if m.errMsg != "" {
 		b.WriteString("\n" + styleError.Render(m.errMsg))
 	}
-	b.WriteString("\n" + styleDim.Render("enter: starten · tab: Feld · →: Vorschlag · esc: abbrechen"))
 	return b.String()
 }

@@ -211,7 +211,6 @@ func overviewView(frames []watson.Frame, state *watson.State, weekStart time.Wee
 	keep, dropped, projW, cellW := overviewFit(width, len(cols))
 
 	var b strings.Builder
-	b.WriteString(styleTitle.Render("Übersicht — Summen pro Projekt") + "\n\n")
 	fmt.Fprintf(&b, "%-*s", projW, truncate("Projekt", projW))
 	for _, i := range keep {
 		fmt.Fprintf(&b, " %*s", cellW, columnHeader(cols[i], cellW))
@@ -241,6 +240,5 @@ func overviewView(frames []watson.Frame, state *watson.State, weekStart time.Wee
 	if state != nil {
 		b.WriteString("\n\n" + styleRunning.Render(runningNote(state, cols, weekStart, now, projW)))
 	}
-	b.WriteString("\n\n" + styleDim.Render("esc: zurück"))
 	return b.String()
 }

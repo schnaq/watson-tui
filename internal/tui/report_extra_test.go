@@ -51,10 +51,21 @@ func TestReportViewRenders(t *testing.T) {
 		mkFrame("a1111111111111111111111111111111", "alpha", day, 2*time.Hour, "code"),
 	}
 	out := reportModel{per: period{unit: unitWeek, ref: day}}.view(frames, nil, time.Monday, day)
-	for _, want := range []string{"Report", "alpha", "[code]", "Gesamt", "2h 00m"} {
+	for _, want := range []string{"alpha", "[code]", "Gesamt", "2h 00m"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("view missing %q in:\n%s", want, out)
 		}
+	}
+	// The title moved into the header, which names the view and its period, so
+	// the body must not repeat it.
+	if strings.Contains(out, "Report") {
+		t.Errorf("body must not repeat the header's title:\n%s", out)
+	}
+	app := newTestApp(t)
+	app.mode = modeReport
+	app.report = reportModel{per: period{unit: unitWeek, ref: day}}
+	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Report") {
+		t.Errorf("header must name the view: %q", got)
 	}
 }
 

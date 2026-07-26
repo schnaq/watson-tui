@@ -407,6 +407,8 @@ func (a *App) headerFields() [][]headerField {
 	case modeForm:
 		what := "neu"
 		if a.form.editing {
+			// ShortID instead of a slice: a foreign frames file may carry an ID
+			// shorter than 7 chars, and a panic in View() strands the alt-screen.
 			what = "bearbeiten (" + (watson.Frame{ID: a.form.frameID}).ShortID() + ")"
 		}
 		return [][]headerField{{{"Frame", what}}, {{}, timer}}
@@ -510,9 +512,7 @@ func (a *App) View() string {
 }
 
 func helpView() string {
-	return styleTitle.Render("Tasten") + `
-
-  j/k, ↓/↑      navigieren
+	return `  j/k, ↓/↑      navigieren
   enter         Frame editieren
   n             neuer Frame
   d             Frame löschen
@@ -525,7 +525,5 @@ func helpView() string {
   o             Übersicht (Abrechnung)
   R             neu laden
   ?             diese Hilfe
-  q             beenden
-
-Beliebige Taste schließt die Hilfe.`
+  q             beenden`
 }

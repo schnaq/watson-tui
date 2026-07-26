@@ -100,7 +100,6 @@ func runningInPeriod(state *watson.State, p period, weekStart time.Weekday) bool
 func (m reportModel) view(frames []watson.Frame, state *watson.State, weekStart time.Weekday, now time.Time) string {
 	lines, grand := aggregate(withRunning(frames, state, now), m.per, weekStart)
 	var b strings.Builder
-	b.WriteString(styleTitle.Render("Report — "+m.per.label(weekStart)) + "\n\n")
 	if len(lines) == 0 {
 		b.WriteString(styleDim.Render("keine Frames im Zeitraum") + "\n")
 	}
@@ -116,6 +115,5 @@ func (m reportModel) view(frames []watson.Frame, state *watson.State, weekStart 
 		b.WriteString("\n\n" + styleRunning.Render(fmt.Sprintf("▶ %s läuft (%s) und ist eingerechnet",
 			truncate(state.Project, 32), formatClock(now.Sub(state.Start)))))
 	}
-	b.WriteString("\n\n" + styleDim.Render("t/w/m: Zeitraum · [ / ]: verschieben · esc: zurück"))
 	return b.String()
 }

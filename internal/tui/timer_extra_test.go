@@ -41,8 +41,11 @@ func TestTimerStartPromptView(t *testing.T) {
 	app.Update(key("s"))
 	app.start.errMsg = "Projekt fehlt"
 	out := app.View()
-	if !strings.Contains(out, "Timer starten") {
-		t.Error("start prompt view missing title")
+	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Timer starten") {
+		t.Errorf("header must name the prompt: %q", got)
+	}
+	if strings.Contains(app.start.view(), "Timer starten") {
+		t.Errorf("body must not repeat the header's title:\n%s", app.start.view())
 	}
 	if !strings.Contains(out, "Projekt fehlt") {
 		t.Error("start prompt view must show the error message")

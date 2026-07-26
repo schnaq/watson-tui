@@ -144,13 +144,19 @@ func TestEditRoundTripKeepsSeconds(t *testing.T) {
 
 // TestFormViewShortFrameID: a foreign frames file may carry an ID shorter than
 // the seven chars the title shows. View() must not panic on it — a panic there
-// leaves the terminal in the alt-screen.
+// leaves the terminal in the alt-screen. The title lives in the chrome now, so
+// the short ID is asserted where it is rendered: the header of the form mode.
 func TestFormViewShortFrameID(t *testing.T) {
 	now := time.Now()
 	existing := watson.Frame{ID: "abc", Project: "p", Start: now.Add(-time.Hour), Stop: now, Tags: []string{}}
-	out := newFormModel(&existing, nil, now).view()
-	if !strings.Contains(out, "Frame bearbeiten (abc)") {
-		t.Errorf("short id must render verbatim: %q", out)
+	app := newTestApp(t)
+	app.form = newFormModel(&existing, nil, now)
+	app.mode = modeForm
+	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "bearbeiten (abc)") {
+		t.Errorf("short id must render verbatim: %q", got)
+	}
+	if out := app.View(); !strings.Contains(out, "bearbeiten (abc)") {
+		t.Errorf("assembled view lost the frame it edits:\n%s", out)
 	}
 }
 
@@ -194,28 +200,35 @@ func TestOverlapWarningResetsOnEdit(t *testing.T) {
 	}
 }
 
-// view renders both titles and the error line.
+// TestFormView: the body carries the fields and the error line; the chrome
+// carries what it used to repeat — the header says which frame is being edited,
+// the footer names the keys. Both are asserted, so the coverage moved with the
+// text instead of disappearing.
 func TestFormView(t *testing.T) {
-	newForm := newFormModel(nil, nil, time.Now())
-	out := newForm.view()
-	if !strings.Contains(out, "Neuer Frame") {
-		t.Error("new form view missing title")
+	app := newTestApp(t)
+	app.form = newFormModel(nil, nil, time.Now())
+	app.mode = modeForm
+	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Frame neu") {
+		t.Errorf("header must name the new frame: %q", got)
 	}
-	if !strings.Contains(out, "esc: abbrechen") {
-		t.Error("view missing key hint")
+	if got := footerHints(modeForm); !strings.Contains(got, "esc abbrechen") {
+		t.Errorf("footer must carry the abort key: %q", got)
+	}
+	out := app.form.view()
+	if strings.Contains(out, "Neuer Frame") || strings.Contains(out, "esc:") {
+		t.Errorf("body must not repeat the chrome's title or hints:\n%s", out)
 	}
 
 	existing := watson.Frame{
 		ID: "abcdef01234567890123456789012345", Project: "p",
 		Start: time.Now().Add(-time.Hour), Stop: time.Now(), Tags: []string{"x"},
 	}
-	editForm := newFormModel(&existing, nil, time.Now())
-	editForm.errMsg = "kaputt"
-	out = editForm.view()
-	if !strings.Contains(out, "Frame bearbeiten (abcdef0") {
-		t.Errorf("edit form view missing title: %q", out)
+	app.form = newFormModel(&existing, nil, time.Now())
+	app.form.errMsg = "kaputt"
+	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Frame bearbeiten (abcdef0") {
+		t.Errorf("header must name the edited frame: %q", got)
 	}
-	if !strings.Contains(out, "kaputt") {
-		t.Error("view missing errMsg")
+	if out := app.form.view(); !strings.Contains(out, "kaputt") {
+		t.Errorf("body must keep the errMsg:\n%s", out)
 	}
 }
