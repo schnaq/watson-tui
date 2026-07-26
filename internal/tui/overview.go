@@ -235,7 +235,13 @@ func overviewView(frames []watson.Frame, state *watson.State, weekStart time.Wee
 		}
 		b.WriteByte('\n')
 	}
-	totalLine := fmt.Sprintf("%-*s", projW, "Gesamt")
+	// Truncated like the project rows above: without it the label keeps all six
+	// of its columns while the rows give theirs up, the line runs past the table
+	// from width 15 down, and fitBody cuts the least significant digits off the
+	// grand total — the one number on this screen that goes on an invoice, and the
+	// only line that was still illegible. A cut label reads as cut; a cut number
+	// does not.
+	totalLine := fmt.Sprintf("%-*s", projW, truncate("Gesamt", projW))
 	for _, i := range keep {
 		totalLine += fmt.Sprintf(" %*s", cellW, truncate(cellDuration(totals[i]), cellW))
 	}

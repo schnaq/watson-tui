@@ -59,6 +59,50 @@ func TestOverviewFitNeverExceedsWidth(t *testing.T) {
 	}
 }
 
+// TestOverviewRenderedLinesFitEveryWidth walks the rendered lines instead of the
+// layout arithmetic. TestOverviewFitNeverExceedsWidth pins that the columns fit
+// the width, and that property does not imply the rendered one: the totals row
+// wrote its label with a bare %-*s, so from width 15 down it ran one to five
+// columns past the table and fitBody ate the digits of the single number an
+// invoice is copied from — "Gesamt    4h 02" at 15, "Gesamt    4" at 11 — while
+// the arithmetic test stayed green.
+//
+// No running timer: its note is prose whose second line fitBody still cuts below
+// ~50 columns (recorded in task-4-fixes-report.md), and this sweep is about the
+// table. Frames are non-empty because the "keine Frames" hint is not width-bound
+// either and would fail the sweep for a reason that is not the finding.
+func TestOverviewRenderedLinesFitEveryWidth(t *testing.T) {
+	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
+	monday := time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local)
+	frames := []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "kunde-a", monday, 4*time.Hour+2*time.Minute),
+		mkFrame("b2222222222222222222222222222222", "schnaq", monday.Add(6*time.Hour), 30*time.Minute),
+	}
+	cols := overviewColumns(now, time.Monday)
+	_, totals := buildOverview(frames, cols, time.Monday)
+
+	for width := 11; width <= 140; width++ {
+		out := overviewView(frames, nil, time.Monday, now, width)
+		for i, line := range strings.Split(out, "\n") {
+			if w := lipgloss.Width(line); w > width {
+				t.Errorf("width %d: rendered line %d is %d wide: %q", width, i, w, line)
+			}
+		}
+		// The totals row rebuilt from the layout: a substring check on "4h 32m"
+		// alone would pass on a row whose label overflowed, because the same value
+		// stands in several columns.
+		keep, _, projW, cellW := overviewFit(width, len(cols))
+		want := fmt.Sprintf("%-*s", projW, truncate("Gesamt", projW))
+		for _, i := range keep {
+			want += fmt.Sprintf(" %*s", cellW, truncate(cellDuration(totals[i]), cellW))
+		}
+		if !strings.Contains(out, want) {
+			t.Errorf("width %d: totals row is not rendered as computed:\nwant %q\ngot\n%s",
+				width, want, out)
+		}
+	}
+}
+
 // TestOverviewNarrowKeepsExactDurations is the regression for the worst defect
 // this view can have: at 60 columns the table used to run two columns past the
 // terminal, App.View clipped the overhang, and because the cells are
