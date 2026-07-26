@@ -1,11 +1,8 @@
 package tui
 
 import (
-	"strings"
 	"testing"
 	"time"
-
-	"github.com/schnaq/watson-tui/internal/watson"
 )
 
 func TestFormatDuration(t *testing.T) {
@@ -31,25 +28,5 @@ func TestFormatClock(t *testing.T) {
 	}
 	if got := formatClock(3*time.Hour + 62*time.Second); got != "3:01:02" {
 		t.Errorf("got %q", got)
-	}
-}
-
-func TestRenderStatusRunning(t *testing.T) {
-	start := time.Now().Add(-90 * time.Second)
-	s := &watson.State{Project: "proj", Start: start, Tags: []string{"a"}}
-	out := renderStatus(80, s, time.Now(), "links", "")
-	if !strings.Contains(out, "▶ proj [a]") || !strings.Contains(out, "links") {
-		t.Errorf("status = %q", out)
-	}
-}
-
-func TestRenderStatusIdleAndError(t *testing.T) {
-	out := renderStatus(80, nil, time.Now(), "links", "")
-	if !strings.Contains(out, "kein Timer") {
-		t.Errorf("status = %q", out)
-	}
-	out = renderStatus(80, nil, time.Now(), "links", "kaputt")
-	if !strings.Contains(out, "kaputt") || strings.Contains(out, "links") {
-		t.Errorf("error must replace left segment: %q", out)
 	}
 }

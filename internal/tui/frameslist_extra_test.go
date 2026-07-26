@@ -96,27 +96,32 @@ func TestListViewEmptyMessages(t *testing.T) {
 	}
 }
 
-// TestStatusLeft covers the three branches of the new App.statusLeft():
-// plain (period + count), filtering (live input view), and a set filter.
-func TestStatusLeft(t *testing.T) {
+// TestHeaderFieldsListBranches covers the three filter branches of the list
+// header: no filter (the field says so instead of vanishing), a set filter, and
+// the live input while typing, which has to replace the stored filter rather
+// than sit next to it.
+func TestHeaderFieldsListBranches(t *testing.T) {
 	app := newTestApp(t)
+	app.mode = modeList
 	app.list.per = period{unit: unitAll, ref: time.Now()}
 	app.list.refresh(app.frames, time.Monday)
 
-	if got := app.statusLeft(); !strings.Contains(got, "· 0 Frames") || strings.Contains(got, "Filter") {
-		t.Errorf("plain statusLeft = %q", got)
+	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Frames 0") ||
+		!strings.Contains(got, "Filter —") {
+		t.Errorf("plain header = %q", got)
 	}
 
 	app.list.filter = "foo"
-	if got := app.statusLeft(); !strings.Contains(got, "Filter: foo") {
-		t.Errorf("filter statusLeft = %q", got)
+	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Filter foo") {
+		t.Errorf("filter header = %q", got)
 	}
 
 	app.list.filtering = true
 	app.list.filterInput.Focus()
 	app.list.filterInput.SetValue("bar")
-	if got := app.statusLeft(); !strings.Contains(got, "bar") || strings.Contains(got, "Filter: foo") {
-		t.Errorf("filtering statusLeft = %q", got)
+	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "bar") ||
+		strings.Contains(got, "Filter foo") {
+		t.Errorf("filtering header = %q", got)
 	}
 }
 

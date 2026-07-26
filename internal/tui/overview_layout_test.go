@@ -122,20 +122,20 @@ func TestWithRunningNoState(t *testing.T) {
 	}
 }
 
-// TestStatusLeftPerMode: the status bar must describe the view it belongs to,
-// not always the list period.
-func TestStatusLeftPerMode(t *testing.T) {
+// TestHeaderFieldsPerModeContext: the header must describe the view it belongs
+// to, not always the list period.
+func TestHeaderFieldsPerModeContext(t *testing.T) {
 	app := newTestApp(t)
 	app.Update(key("o"))
-	if left := app.statusLeft(); !strings.Contains(left, "Übersicht") {
-		t.Errorf("overview status = %q, want it to mention Übersicht", left)
+	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Übersicht") {
+		t.Errorf("overview header = %q, want it to mention Übersicht", got)
 	}
 	app.Update(key("esc"))
 	app.Update(key("r"))
 	app.report.per = period{unit: unitMonth, ref: time.Date(2026, 7, 22, 0, 0, 0, 0, time.Local)}
-	left := app.statusLeft()
-	if !strings.Contains(left, "Report") || !strings.Contains(left, "Juli 2026") {
-		t.Errorf("report status = %q, want Report and the report period", left)
+	got := renderFieldsFlat(app.headerFields())
+	if !strings.Contains(got, "Report") || !strings.Contains(got, "Juli 2026") {
+		t.Errorf("report header = %q, want Report and the report period", got)
 	}
 }
 

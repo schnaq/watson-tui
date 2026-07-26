@@ -167,6 +167,46 @@ func TestChromeHeightCollapses(t *testing.T) {
 	}
 }
 
+// TestSpreadFillsTheLineAndKeepsBothFields: spread has to fill its line to the
+// column, and it must not lose a field. Two adversarial cases hide here. A right
+// string of exactly width-1 used to leave one column for the left field and then
+// still force a space between them, so the line came out one column too wide. A
+// right string that fills the budget on its own used to drop the left field
+// altogether — on a narrow terminal a long running-timer value would silently
+// hide "Filter  —", and naming the context is what the header is for.
+func TestSpreadFillsTheLineAndKeepsBothFields(t *testing.T) {
+	left := "Filter  —"
+	for width := 3; width <= 40; width++ {
+		for _, rightW := range []int{1, width - 2, width - 1, width, width + 5} {
+			if rightW < 1 {
+				continue
+			}
+			right := strings.Repeat("r", rightW)
+			out := spread(left, right, width)
+			if w := lipgloss.Width(out); w != width {
+				t.Errorf("width %d right %d: line is %d wide: %q", width, rightW, w, out)
+			}
+			if !strings.Contains(out, "F") {
+				t.Errorf("width %d right %d: left field dropped: %q", width, rightW, out)
+			}
+			if !strings.Contains(out, "r") {
+				t.Errorf("width %d right %d: right field dropped: %q", width, rightW, out)
+			}
+		}
+	}
+	// Below three columns there is no room for two fields and the space between
+	// them, and a single field must still stay inside the width.
+	for width := 0; width < 3; width++ {
+		for _, out := range []string{
+			spread(left, "rechts", width), spread("", "rechts", width), spread(left, "", width),
+		} {
+			if w := lipgloss.Width(out); w > width {
+				t.Errorf("width %d: line is %d wide: %q", width, w, out)
+			}
+		}
+	}
+}
+
 // TestHeaderShowsFieldsFramed: at full height the header is framed, carries the
 // version and every field label and value.
 func TestHeaderShowsFieldsFramed(t *testing.T) {

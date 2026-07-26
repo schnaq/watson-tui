@@ -353,35 +353,124 @@ func (a *App) updateStartTimer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return a, cmd
 }
 
-// statusLeft is the view-specific left segment of the status bar.
-func (a *App) statusLeft() string {
-	switch a.mode {
-	case modeOverview:
-		return "Übersicht · Abrechnung"
-	case modeReport:
-		return "Report · " + a.report.per.label(a.cfg.WeekStart)
+// timerField renders the running timer for the header; every mode shows it, so
+// stopping a timer is never more than one glance away.
+func (a *App) timerField() headerField {
+	if a.state == nil {
+		return headerField{value: styleDim.Render("kein Timer")}
 	}
-	n := 0
-	for _, r := range a.list.rows {
-		if !r.isHeader {
-			n++
+	label := a.state.Project
+	if len(a.state.Tags) > 0 {
+		label += " [" + strings.Join(a.state.Tags, ", ") + "]"
+	}
+	return headerField{value: styleRunning.Render(
+		fmt.Sprintf("▶ %s %s", label, formatClock(a.now.Sub(a.state.Start))))}
+}
+
+// headerFields returns the context rows of the header for the active mode.
+// Always two rows: chromeHeight budgets four lines for the framed header, which
+// is two field rows plus the border, and a mode with fewer would leave the body
+// a line it never uses.
+func (a *App) headerFields() [][]headerField {
+	timer := a.timerField()
+	switch a.mode {
+	case modeList:
+		n := 0
+		for _, r := range a.list.rows {
+			if !r.isHeader {
+				n++
+			}
+		}
+		filter := "—"
+		if a.list.filtering {
+			filter = a.list.filterInput.View()
+		} else if a.list.filter != "" {
+			filter = a.list.filter
+		}
+		return [][]headerField{
+			{{"Zeitraum", a.list.per.label(a.cfg.WeekStart)}, {"Frames", fmt.Sprintf("%d", n)}},
+			{{"Filter", filter}, timer},
+		}
+	case modeReport:
+		lines, _ := aggregate(withRunning(a.frames, a.state, a.now), a.report.per, a.cfg.WeekStart)
+		return [][]headerField{
+			{{"Report", a.report.per.label(a.cfg.WeekStart)}, {"Projekte", fmt.Sprintf("%d", len(lines))}},
+			{{}, timer},
+		}
+	case modeOverview:
+		rows, _ := buildOverview(withRunning(a.frames, a.state, a.now),
+			overviewColumns(a.now, a.cfg.WeekStart), a.cfg.WeekStart)
+		return [][]headerField{
+			{{"Übersicht", "Abrechnung"}, {"Projekte", fmt.Sprintf("%d", len(rows))}},
+			{{}, timer},
+		}
+	case modeForm:
+		what := "neu"
+		if a.form.editing {
+			what = "bearbeiten (" + (watson.Frame{ID: a.form.frameID}).ShortID() + ")"
+		}
+		return [][]headerField{{{"Frame", what}}, {{}, timer}}
+	case modeStartTimer:
+		return [][]headerField{{{"Timer", "starten"}}, {{}, timer}}
+	case modeConfirmDelete:
+		return [][]headerField{{{"Frame", "löschen"}}, {{}, timer}}
+	case modeConfirmCancel:
+		return [][]headerField{{{"Timer", "verwerfen"}}, {{}, timer}}
+	case modeHelp:
+		return [][]headerField{{{"Hilfe", "Tastenbelegung"}}, {{}, timer}}
+	default: // modeFatal
+		// The timer row belongs here too: fatal is reached from reload(), which
+		// returns before it overwrites a.state, so a timer that was running when
+		// the file went bad is still shown — and it is the one thing the user may
+		// want to act on before restarting.
+		return [][]headerField{
+			{{"Fehler", "watson-tui kann nicht weiterarbeiten"}}, {{}, timer},
 		}
 	}
-	left := fmt.Sprintf("%s · %d Frames", a.list.per.label(a.cfg.WeekStart), n)
-	if a.list.filtering {
-		return left + " · " + a.list.filterInput.View()
+}
+
+// panelTitle names the body panel of the active mode.
+func panelTitle(m mode) string {
+	switch m {
+	case modeForm:
+		return "Frame"
+	case modeReport:
+		return "Report"
+	case modeStartTimer:
+		return "Timer"
+	case modeConfirmDelete, modeConfirmCancel:
+		return "Bestätigen"
+	case modeHelp:
+		return "Hilfe"
+	case modeFatal:
+		return "Fehler"
+	default:
+		return "Frames"
 	}
-	if a.list.filter != "" {
-		left += " · Filter: " + a.list.filter
-	}
-	return left
 }
 
 func (a *App) View() string {
+	// The chrome takes its lines off the top and bottom; the rest is the body's.
+	bodyHeight := max(a.height-chromeHeight(a.height), 1)
+	// Two exceptions to the frame: the billing table needs every column it can
+	// get, so it renders without side borders, and a body of one line has no room
+	// left for a border either — on a terminal that short the height promise
+	// outranks the decoration.
+	framed := a.mode != modeOverview && bodyHeight > 2
+	content, bodyWidth := bodyHeight, a.width
+	if framed {
+		// panel keeps two border lines and, per line, two border columns plus a
+		// space of gutter on either side.
+		content, bodyWidth = bodyHeight-2, max(a.width-4, 1)
+	}
+
 	var body string
 	switch a.mode {
 	case modeFatal:
-		body = styleError.Render("Fehler") + "\n\n" + a.fatalMsg + "\n\nBeliebige Taste beendet."
+		// Wrapped, not clipped: the message names the backup file, and a cut
+		// would drop exactly the path the user has to go and look at. In error
+		// colour, because panel has no error-coloured border to offer.
+		body = styleError.Width(bodyWidth).Render(a.fatalMsg)
 	case modeHelp:
 		body = helpView()
 	case modeForm:
@@ -393,20 +482,31 @@ func (a *App) View() string {
 	case modeStartTimer:
 		body = a.start.view()
 	case modeConfirmCancel:
-		body = styleTitle.Render("Laufenden Timer verwerfen?") + "\n\n" +
-			styleDim.Render("y/enter: verwerfen · andere Taste: abbrechen")
+		body = "Laufenden Timer verwerfen?"
 	case modeConfirmDelete:
 		f := a.pendingDelete
-		body = styleTitle.Render("Frame löschen?") + fmt.Sprintf("\n\n  %s  %s–%s  %s\n\n%s",
+		body = fmt.Sprintf("Frame löschen?\n\n  %s  %s–%s  %s",
 			f.Project,
 			f.Start.Local().Format("2006-01-02 15:04"),
 			f.Stop.Local().Format("15:04"),
-			f.ShortID(),
-			styleDim.Render("y/enter: löschen · andere Taste: abbrechen"))
+			f.ShortID())
 	default:
-		body = a.list.view(a.height - 1)
+		// The list scrolls itself to a height; the others are cut by fitBody.
+		body = a.list.view(content)
 	}
-	return body + "\n" + renderStatus(a.width, a.state, a.now, a.statusLeft(), a.errMsg)
+	body = fitBody(body, content, bodyWidth)
+
+	var parts []string
+	if header := renderHeader(a.width, a.height, a.version, a.headerFields()); header != "" {
+		parts = append(parts, header)
+	}
+	if framed {
+		parts = append(parts, panel(panelTitle(a.mode), body, a.width, false))
+	} else {
+		parts = append(parts, body)
+	}
+	parts = append(parts, renderFooter(a.width, footerHints(a.mode), a.errMsg))
+	return strings.Join(parts, "\n")
 }
 
 func helpView() string {

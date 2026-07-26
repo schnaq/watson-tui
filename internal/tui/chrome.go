@@ -151,21 +151,62 @@ func clipWidth(s string, max int) string {
 }
 
 // spread puts left at the start and right at the end of a line of the given
-// width, with at least one space between them.
+// width, with at least one space between them. When the two do not both fit, the
+// right field is capped first so that the left one survives: a long
+// running-timer value must not push the field naming the view off the line, that
+// naming is what the header is for. The floor the left field keeps — a third of
+// the line — is a judgement call, not a derived number; it only has to leave
+// enough to recognise the label by.
 func spread(left, right string, width int) string {
+	if width < 1 {
+		return ""
+	}
+	if left == "" {
+		return clipWidth(right, width)
+	}
 	if right == "" {
 		return clipWidth(left, width)
 	}
-	rightW := lipgloss.Width(right)
-	if rightW >= width {
-		return clipWidth(right, width)
+	if width < 3 {
+		// No room for two fields and the space between them: keep the context.
+		return clipWidth(left, width)
 	}
-	left = clipWidth(left, max(width-rightW-1, 1))
-	gap := width - lipgloss.Width(left) - rightW
+	if lipgloss.Width(left)+1+lipgloss.Width(right) > width {
+		// Cap the right field, then fit the left one into what is left. Both caps
+		// stay above zero for width >= 3, so the line comes out exactly width
+		// wide: clipping the left field to width-rightW-1 is what keeps the gap
+		// below from having to squeeze a space in that does not fit.
+		floor := min(lipgloss.Width(left), max(width/3, 1))
+		right = clipWidth(right, width-floor-1)
+		left = clipWidth(left, width-lipgloss.Width(right)-1)
+	}
+	gap := width - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 1 {
 		gap = 1
 	}
 	return left + strings.Repeat(" ", gap) + right
+}
+
+// fitBody cuts body down to maxLines lines of at most maxWidth columns, so the
+// panel around it cannot grow past the height App.View budgeted for it. The
+// views hand out pre-styled lines, so the cut counts printable columns
+// (clipWidth) instead of runes — see there for why. Lines go from the bottom:
+// letting the terminal scroll instead would push the header off the top, and the
+// head of a view is the part that says what one is looking at.
+func fitBody(body string, maxLines, maxWidth int) string {
+	if maxLines < 1 {
+		maxLines = 1
+	}
+	// A trailing newline would otherwise become a blank padded row inside the
+	// panel and cost the body a line it has content for.
+	lines := strings.Split(strings.TrimRight(body, "\n"), "\n")
+	if len(lines) > maxLines {
+		lines = lines[:maxLines]
+	}
+	for i, line := range lines {
+		lines[i] = clipWidth(line, maxWidth)
+	}
+	return strings.Join(lines, "\n")
 }
 
 // renderHeader draws the context panel. Above headerFullMinHeight it is framed

@@ -1,0 +1,222 @@
+package tui
+
+import (
+	"strings"
+	"testing"
+	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/schnaq/watson-tui/internal/watson"
+)
+
+// chromeModes lists every mode View() can be called in. The layout arithmetic
+// has to hold in all of them, not just in the list.
+var chromeModes = []mode{
+	modeList, modeForm, modeReport, modeOverview, modeStartTimer,
+	modeConfirmDelete, modeConfirmCancel, modeHelp, modeFatal,
+}
+
+// chromeHeights are the terminal heights the arithmetic has to hold at: the
+// three header branches (framed, one line, gone), both of their boundaries, and
+// the short terminals where the panel border no longer fits at all.
+var chromeHeights = []int{30, 20, 19, 15, 12, 11, 10, 5, 3, 2}
+
+// chromeWidths bracket the narrow terminal where the billing table no longer
+// fits its own minimum column widths (60) and the comfortable one (100).
+var chromeWidths = []int{60, 80, 100}
+
+// chromeApp builds an app with every sub-model filled, so View() has real
+// content to render whichever mode it is put into. frames must not be empty.
+func chromeApp(t *testing.T, now time.Time, width, height int, frames []watson.Frame) *App {
+	t.Helper()
+	app := newTestApp(t)
+	app.Update(tea.WindowSizeMsg{Width: width, Height: height})
+	app.frames = frames
+	app.list.per = period{unit: unitAll, ref: now}
+	app.list.refresh(app.frames, time.Monday)
+	app.form = newFormModel(&app.frames[0], app.frames, now)
+	app.start = newStartModel(app.frames)
+	app.report = newReportModel(now)
+	app.pendingDelete = app.frames[0]
+	// A realistic fatal message: two lines, the second one a backup path far
+	// wider than a narrow terminal, so the wrapping is exercised as well.
+	app.fatalMsg = "frames-Datei nicht lesbar: invalid character 'k'\n" +
+		"Backup: /var/folders/78/jyqksnb52nx_sm8zb5sj90dh0000gn/T/watson/001/frames.bak"
+	return app
+}
+
+// TestViewHasHeaderBodyFooter: the full frame carries all three parts.
+func TestViewHasHeaderBodyFooter(t *testing.T) {
+	app := newTestApp(t)
+	app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	out := app.View()
+	for _, want := range []string{"watson-tui", "Zeitraum", "j/k bewegen"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("view missing %q:\n%s", want, out)
+		}
+	}
+}
+
+// TestViewNeverExceedsWidth: no line of any mode may be wider than the
+// terminal — the whole point of the layout arithmetic.
+func TestViewNeverExceedsWidth(t *testing.T) {
+	now := time.Now()
+	frames := []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "ein ziemlich langer projektname",
+			now.Add(-2*time.Hour), time.Hour, "tag-eins", "tag-zwei"),
+	}
+	for _, width := range chromeWidths {
+		for _, height := range chromeHeights {
+			for _, m := range chromeModes {
+				app := chromeApp(t, now, width, height, frames)
+				app.mode = m
+				for i, line := range strings.Split(app.View(), "\n") {
+					if w := lipgloss.Width(line); w > width {
+						t.Errorf("mode %d at %dx%d: line %d is %d wide: %q", m, width, height, i, w, line)
+					}
+				}
+			}
+		}
+	}
+}
+
+// TestViewBudgetsHeight: the rendered frame must fit the terminal height, in
+// every mode — a frame one line too tall scrolls the alt screen and pushes the
+// header out of sight.
+func TestViewBudgetsHeight(t *testing.T) {
+	now := time.Now()
+	var frames []watson.Frame
+	for i := 0; i < 40; i++ {
+		frames = append(frames, mkFrame(
+			strings.Repeat("a", 31)+string(rune('a'+i%26)), "projekt",
+			now.Add(-time.Duration(i*30)*time.Hour), time.Hour))
+	}
+	for _, width := range chromeWidths {
+		for _, height := range chromeHeights {
+			for _, m := range chromeModes {
+				app := chromeApp(t, now, width, height, frames)
+				app.mode = m
+				if lines := strings.Count(app.View(), "\n") + 1; lines > height {
+					t.Errorf("mode %d at %dx%d: view has %d lines", m, width, height, lines)
+				}
+			}
+		}
+	}
+}
+
+// TestViewHeaderRowsMatchChromeBudget: chromeHeight reserves four lines for the
+// framed header, so every mode has to fill exactly those. A mode with a single
+// field row draws a three-line header, which leaves the body a line it never
+// uses and the footer floating one row above the bottom.
+func TestViewHeaderRowsMatchChromeBudget(t *testing.T) {
+	now := time.Now()
+	frames := []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "alpha", now.Add(-2*time.Hour), time.Hour),
+	}
+	const height = 30
+	want := chromeHeight(height) - 1 // the footer takes the remaining line
+	for _, m := range chromeModes {
+		app := chromeApp(t, now, 100, height, frames)
+		app.mode = m
+		rows := app.headerFields()
+		if len(rows) != 2 {
+			t.Errorf("mode %d has %d header rows, want 2", m, len(rows))
+		}
+		out := renderHeader(100, height, app.version, rows)
+		if lines := strings.Count(out, "\n") + 1; lines != want {
+			t.Errorf("mode %d: framed header has %d lines, chromeHeight reserves %d:\n%s",
+				m, lines, want, out)
+		}
+	}
+}
+
+// TestViewShedsHeaderOnShortTerminals: the collapse thresholds have to be
+// visible in the assembled frame, not just in renderHeader. Between 12 and 19
+// lines the header keeps the context but loses its frame and the version title;
+// below 12 every line belongs to the body and the header is gone entirely. The
+// footer stays in both cases — it is the only thing left that names the keys.
+func TestViewShedsHeaderOnShortTerminals(t *testing.T) {
+	now := time.Now()
+	frames := []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "alpha", now.Add(-2*time.Hour), time.Hour),
+	}
+	for _, height := range []int{15, 10} {
+		app := chromeApp(t, now, 100, height, frames)
+		out := app.View()
+		if strings.Contains(out, "watson-tui") {
+			t.Errorf("height %d: header frame must be gone:\n%s", height, out)
+		}
+		if !strings.Contains(out, "j/k bewegen") {
+			t.Errorf("height %d: footer must survive:\n%s", height, out)
+		}
+	}
+	// One line of header at 15, none at 10.
+	if out := chromeApp(t, now, 100, 15, frames).View(); !strings.Contains(out, "alle Frames") {
+		t.Errorf("height 15 lost the context line:\n%s", out)
+	}
+	if out := chromeApp(t, now, 100, 10, frames).View(); strings.Contains(out, "alle Frames") {
+		t.Errorf("height 10 must give every line to the body:\n%s", out)
+	}
+}
+
+// TestErrorGoesToFooter: a failed write shows up in the footer, replacing the hints.
+func TestErrorGoesToFooter(t *testing.T) {
+	app := newTestApp(t)
+	app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	app.errMsg = "Löschen fehlgeschlagen: kaputt"
+	out := app.View()
+	if !strings.Contains(out, "Löschen fehlgeschlagen: kaputt") {
+		t.Errorf("error missing from view:\n%s", out)
+	}
+	if strings.Contains(out, "j/k bewegen") {
+		t.Errorf("error must replace the hints:\n%s", out)
+	}
+}
+
+// TestHeaderFieldsPerMode: each mode labels its own context.
+func TestHeaderFieldsPerMode(t *testing.T) {
+	now := time.Now()
+	app := newTestApp(t)
+	app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	app.state = &watson.State{Project: "laufend", Start: now.Add(-time.Minute), Tags: []string{}}
+
+	app.mode = modeList
+	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Zeitraum") || !strings.Contains(got, "Frames") {
+		t.Errorf("list header = %q", got)
+	}
+	app.mode = modeOverview
+	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Übersicht") {
+		t.Errorf("overview header = %q", got)
+	}
+	app.mode = modeReport
+	app.report = newReportModel(now)
+	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Report") {
+		t.Errorf("report header = %q", got)
+	}
+	// The timer belongs to every mode.
+	for _, m := range chromeModes {
+		app.mode = m
+		if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "laufend") {
+			t.Errorf("mode %d header lost the timer: %q", m, got)
+		}
+	}
+	// Without a running timer every mode says so instead of leaving a gap.
+	app.state = nil
+	for _, m := range chromeModes {
+		app.mode = m
+		if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "kein Timer") {
+			t.Errorf("mode %d header lost the idle timer: %q", m, got)
+		}
+	}
+}
+
+func renderFieldsFlat(rows [][]headerField) string {
+	var parts []string
+	for _, r := range rows {
+		for _, f := range r {
+			parts = append(parts, f.label+" "+f.value)
+		}
+	}
+	return strings.Join(parts, " | ")
+}
