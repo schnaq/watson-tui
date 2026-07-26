@@ -350,8 +350,14 @@ func TestViewFillsEveryTerminalItFits(t *testing.T) {
 
 // TestFatalPanelIsErrorColoured: the spec asks for the fatal screen in a panel
 // of error colour, which is why panel takes a border style instead of the
-// focused bool it used to take. Under go test the renderer strips colour out of
-// the rendered string, so the assertion goes to the style the panel is handed.
+// focused bool it used to take.
+//
+// The style was only half of it. Pinning panelBorder alone left View() free to
+// hand panel a styleBorder unconditionally and keep the suite green, so the
+// second half renders the fatal screen and looks for the colour on the frame it
+// actually drew. That needs a colour profile: under go test the renderer detects
+// Ascii and strips every escape, which would make such an assertion pass no
+// matter which style the panel was given.
 func TestFatalPanelIsErrorColoured(t *testing.T) {
 	if got := panelBorder(modeFatal).GetForeground(); got != colErr {
 		t.Errorf("fatal panel border = %v, want the error colour %v", got, colErr)
@@ -363,5 +369,32 @@ func TestFatalPanelIsErrorColoured(t *testing.T) {
 		if got := panelBorder(m).GetForeground(); got != colDim {
 			t.Errorf("mode %d panel border = %v, want the dim border %v", m, got, colDim)
 		}
+	}
+
+	// 0 is termenv.TrueColor, written as a number so that one constant does not
+	// turn termenv into a direct dependency of this module. A wrong value would
+	// strip the colour again and fail the two assertions below rather than quietly
+	// hollow them out. Restored afterwards: the profile is global, and every other
+	// test in this package compares against colourless strings.
+	saved := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(0)
+	defer lipgloss.SetColorProfile(saved)
+
+	now := time.Now()
+	frames := []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "alpha", now.Add(-3*time.Hour), time.Hour),
+	}
+	app := chromeApp(t, now, 60, 24, frames)
+	// The panel's top-left corner, in the error colour: the exact substring panel
+	// writes when it is handed styleError as its border.
+	corner := styleError.Render("╭─")
+
+	app.mode = modeFatal
+	if out := app.View(); !strings.Contains(out, corner) {
+		t.Errorf("the fatal screen must be framed in the error colour, got:\n%q", out)
+	}
+	app.mode = modeReport
+	if out := app.View(); strings.Contains(out, corner) {
+		t.Errorf("only the fatal screen may frame itself in the error colour, got:\n%q", out)
 	}
 }
