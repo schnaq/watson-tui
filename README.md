@@ -47,9 +47,9 @@ die Breite, fallen die hinteren ganz weg statt mitten im Wort zu enden; `?` zeig
 immer die vollständige Belegung.
 
 Auch die Frameliste richtet sich nach der Breite, und zwar in dieser Reihenfolge:
-zuerst schrumpfen die Tags, dann der Projektname (beide mit `…`, unter etwa 60
-bzw. 58 Spalten), unter etwa 44 Spalten fällt die ID-Spalte **ganz** weg, unter
-etwa 26 auch Start- und Endzeit. Gekürzt wird nur, was ein Label ist. Die Dauer
+ab etwa 88 Spalten schrumpfen die Tags (mit `…`), unter etwa 60 sind sie weg und
+der Projektname schrumpft, unter etwa 42 fällt die ID-Spalte **ganz** weg, unter
+etwa 24 auch Start- und Endzeit. Gekürzt wird nur, was ein Label ist. Die Dauer
 bleibt immer vollständig, und die ID steht entweder mit allen sieben Zeichen da
 oder gar nicht: Watson löst IDs über ihr Präfix auf, eine gekürzte ID würde also
 mehrere oder den falschen Frame treffen. Vollständig steht sie im
