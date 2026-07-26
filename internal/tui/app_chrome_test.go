@@ -39,6 +39,13 @@ func chromeApp(t *testing.T, now time.Time, width, height int, frames []watson.F
 	app.start = newStartModel(app.frames)
 	app.report = newReportModel(now)
 	app.pendingDelete = app.frames[0]
+	// A running timer with tags: the widest header field there is, and it lands in
+	// the second header row, which is where the width arithmetic is tightest. Left
+	// unset, the sweep only ever measured the short "kein Timer".
+	app.state = &watson.State{
+		Project: "ein-ziemlich-langer-projektname", Start: now.Add(-90 * time.Minute),
+		Tags: []string{"tag-eins", "tag-zwei"},
+	}
 	// A realistic fatal message: two lines, the second one a backup path far
 	// wider than a narrow terminal, so the wrapping is exercised as well.
 	app.fatalMsg = "frames-Datei nicht lesbar: invalid character 'k'\n" +
