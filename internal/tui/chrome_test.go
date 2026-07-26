@@ -10,7 +10,7 @@ import (
 // TestPanelFramesBodyAndTitle: the panel draws a border, carries its title in
 // the top line and never exceeds the width it was given.
 func TestPanelFramesBodyAndTitle(t *testing.T) {
-	out := panel("Frames", "erste Zeile\nzweite Zeile", 40, false)
+	out := panel("Frames", "erste Zeile\nzweite Zeile", 40, styleBorder)
 	if !strings.Contains(out, "Frames") {
 		t.Errorf("panel lost its title:\n%s", out)
 	}
@@ -33,7 +33,7 @@ func TestPanelFramesBodyAndTitle(t *testing.T) {
 // assert the exact width, not just an upper bound, across both parities.
 func TestPanelTruncatesLongTitle(t *testing.T) {
 	for _, width := range []int{30, 37, 40} {
-		out := panel(strings.Repeat("sehr langer titel ", 5), "body", width, false)
+		out := panel(strings.Repeat("sehr langer titel ", 5), "body", width, styleBorder)
 		for i, line := range strings.Split(out, "\n") {
 			if w := lipgloss.Width(line); w != width {
 				t.Errorf("width %d: line %d is %d wide, want %d: %q",
@@ -56,7 +56,7 @@ func TestPanelKeepsAnsiBodyLinesIntact(t *testing.T) {
 	// Display width 30, but 39 runes. At width 40 the body may use inner-2 = 36
 	// columns, so this line fits and must be passed through untouched.
 	body := "\x1b[31m" + strings.Repeat("a", 30) + "\x1b[0m"
-	out := panel("", body, 40, false)
+	out := panel("", body, 40, styleBorder)
 
 	if !strings.Contains(out, body) {
 		t.Errorf("panel altered a body line that fits:\nwant substring %q\ngot\n%q", body, out)
@@ -77,13 +77,13 @@ func TestPanelKeepsAnsiBodyLinesIntact(t *testing.T) {
 // TestPanelClosesEveryLineAtTheSameColumn: the top line has to end where the
 // bottom line ends, otherwise the frame looks torn open at the top right.
 func TestPanelClosesEveryLineAtTheSameColumn(t *testing.T) {
-	for _, focused := range []bool{false, true} {
+	for _, border := range []lipgloss.Style{styleBorder, styleFocus, styleError} {
 		for _, title := range []string{"", "Frames"} {
-			out := panel(title, "eine Zeile\n", 40, focused)
+			out := panel(title, "eine Zeile\n", 40, border)
 			for i, line := range strings.Split(out, "\n") {
 				if w := lipgloss.Width(line); w != 40 {
-					t.Errorf("title %q focused %v: line %d is %d wide, want 40: %q",
-						title, focused, i, w, line)
+					t.Errorf("title %q: line %d is %d wide, want 40: %q",
+						title, i, w, line)
 				}
 			}
 		}
@@ -94,7 +94,7 @@ func TestPanelClosesEveryLineAtTheSameColumn(t *testing.T) {
 // draw wider than it is allowed to.
 func TestPanelStaysInsideNarrowWidths(t *testing.T) {
 	for width := 0; width <= 10; width++ {
-		out := panel("Frames", "erste Zeile\nzweite Zeile", width, true)
+		out := panel("Frames", "erste Zeile\nzweite Zeile", width, styleFocus)
 		for i, line := range strings.Split(out, "\n") {
 			if w := lipgloss.Width(line); w > width {
 				t.Errorf("width %d: line %d is %d wide: %q", width, i, w, line)

@@ -84,12 +84,19 @@ func TestFatalOnCorruptFrames(t *testing.T) {
 	}
 }
 
+// TestStatusShowsRunningTimer: the header carries marker, project, tag list and
+// clock. The tag list is part of it on purpose — with an empty Tags slice the
+// assertion passed even when timerField dropped the " [tags]" suffix, and the
+// retired TestRenderStatusRunning was the only test that pinned it.
 func TestStatusShowsRunningTimer(t *testing.T) {
 	app := newTestApp(t)
-	app.state = &watson.State{Project: "proj", Start: time.Now().Add(-90 * time.Second), Tags: []string{}}
-	app.now = time.Now()
-	if !strings.Contains(app.View(), "▶ proj") {
-		t.Error("running timer missing in status bar")
+	now := time.Now()
+	app.state = &watson.State{
+		Project: "proj", Start: now.Add(-90 * time.Second), Tags: []string{"dev", "ops"},
+	}
+	app.now = now
+	if want := "▶ proj [dev, ops] 0:01:30"; !strings.Contains(app.View(), want) {
+		t.Errorf("header must carry %q:\n%s", want, app.View())
 	}
 }
 

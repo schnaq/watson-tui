@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/schnaq/watson-tui/internal/watson"
 )
 
@@ -431,6 +432,16 @@ func (a *App) headerFields() [][]headerField {
 	}
 }
 
+// panelBorder colours the frame around the body. The fatal screen gets the
+// error colour the spec asks for; a red frame is what makes it read as a stop
+// sign rather than as one more view.
+func panelBorder(m mode) lipgloss.Style {
+	if m == modeFatal {
+		return styleError
+	}
+	return styleBorder
+}
+
 // panelTitle names the body panel of the active mode.
 func panelTitle(m mode) string {
 	switch m {
@@ -471,7 +482,7 @@ func (a *App) View() string {
 	case modeFatal:
 		// Wrapped, not clipped: the message names the backup file, and a cut
 		// would drop exactly the path the user has to go and look at. In error
-		// colour, because panel has no error-coloured border to offer.
+		// colour, inside a panel whose border panelBorder colours to match.
 		body = styleError.Width(bodyWidth).Render(a.fatalMsg)
 	case modeHelp:
 		body = helpView()
@@ -503,7 +514,7 @@ func (a *App) View() string {
 		parts = append(parts, header)
 	}
 	if framed {
-		parts = append(parts, panel(panelTitle(a.mode), body, a.width, false))
+		parts = append(parts, panel(panelTitle(a.mode), body, a.width, panelBorder(a.mode)))
 	} else {
 		parts = append(parts, body)
 	}

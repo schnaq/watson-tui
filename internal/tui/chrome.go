@@ -16,17 +16,18 @@ import (
 // labels its views. width is the total width including the border, so callers
 // pass the terminal width and the content gets width-4: two border columns and
 // two spaces of gutter.
-func panel(title, body string, width int, focused bool) string {
+//
+// border is the frame's colour. It replaced a focused bool that production code
+// never set to true, because the spec wants the fatal screen framed in the error
+// colour and a bool cannot say that; styleFocus is what a focused panel passes
+// once there is more than one panel to focus.
+func panel(title, body string, width int, border lipgloss.Style) string {
 	// Four columns are the frame and its gutter. Anything narrower has no room
 	// for a panel and could only be drawn by breaking the width promise.
 	if width < 4 {
 		return ""
 	}
 	inner := width - 2 // the run between the two corners
-	border := styleBorder
-	if focused {
-		border = styleFocus
-	}
 
 	// The title sits in the top line: "╭─ title ─...─╮". Of that only the
 	// dashes, the two spaces and the label count towards inner; the corners do
@@ -276,7 +277,7 @@ func renderHeader(width, height int, version string, rows [][]headerField) strin
 			// side, so its content area is width-4.
 			lines = append(lines, spread(left, right, max(width-4, 1)))
 		}
-		return panel("watson-tui "+version, strings.Join(lines, "\n"), width, false)
+		return panel("watson-tui "+version, strings.Join(lines, "\n"), width, styleBorder)
 
 	case height >= headerLineMinHeight:
 		// One line has room for context plus the timer, not for four fields, so

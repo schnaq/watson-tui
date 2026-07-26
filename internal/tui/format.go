@@ -1,3 +1,8 @@
+// This file holds the timer plumbing: the one-second tick that drives the
+// running clock and the two formatters that render a duration for the views.
+// It was statusbar.go until the chrome took the status bar's job — the header
+// carries the context and the timer, the footer the key hints.
+
 package tui
 
 import (

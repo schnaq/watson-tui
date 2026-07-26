@@ -340,3 +340,21 @@ func TestViewFillsEveryTerminalItFits(t *testing.T) {
 		}
 	}
 }
+
+// TestFatalPanelIsErrorColoured: the spec asks for the fatal screen in a panel
+// of error colour, which is why panel takes a border style instead of the
+// focused bool it used to take. Under go test the renderer strips colour out of
+// the rendered string, so the assertion goes to the style the panel is handed.
+func TestFatalPanelIsErrorColoured(t *testing.T) {
+	if got := panelBorder(modeFatal).GetForeground(); got != colErr {
+		t.Errorf("fatal panel border = %v, want the error colour %v", got, colErr)
+	}
+	for _, m := range chromeModes {
+		if m == modeFatal {
+			continue
+		}
+		if got := panelBorder(m).GetForeground(); got != colDim {
+			t.Errorf("mode %d panel border = %v, want the dim border %v", m, got, colDim)
+		}
+	}
+}
