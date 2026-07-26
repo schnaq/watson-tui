@@ -489,7 +489,10 @@ func (a *App) View() string {
 	case modeForm:
 		body = a.form.view()
 	case modeReport:
-		body = a.report.view(a.frames, a.state, a.cfg.WeekStart, a.now)
+		// bodyWidth, not a.width: the report is framed, so the columns it lays out
+		// have to fit inside the panel — handing it the terminal width would put
+		// four columns of border and gutter back under fitBody's knife.
+		body = a.report.view(a.frames, a.state, a.cfg.WeekStart, a.now, bodyWidth)
 	case modeOverview:
 		body = overviewView(a.frames, a.state, a.cfg.WeekStart, a.now, a.width)
 	case modeStartTimer:
