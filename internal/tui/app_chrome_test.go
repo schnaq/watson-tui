@@ -220,3 +220,76 @@ func renderFieldsFlat(rows [][]headerField) string {
 	}
 	return strings.Join(parts, " | ")
 }
+
+// TestViewKeepsTimerBottomRight: the spec puts the running timer in the
+// header's bottom right in every mode ("Feld 4 (rechts unten) ist in jedem
+// Modus der laufende Timer"). Only the list mode fills the bottom left, so the
+// eight modes that leave it empty are the ones that used to move the timer to
+// the left edge. The assertion is its position, not its presence: a test that
+// only looked for the timer stayed green while it sat bottom left.
+func TestViewKeepsTimerBottomRight(t *testing.T) {
+	const width, height = 100, 30
+	now := time.Now()
+	frames := []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "alpha", now.Add(-2*time.Hour), time.Hour),
+	}
+	for _, m := range chromeModes {
+		app := chromeApp(t, now, width, height, frames)
+		app.now = now
+		app.state = &watson.State{Project: "laufend", Start: now.Add(-90 * time.Second), Tags: []string{"dev"}}
+		app.mode = m
+		timer := "▶ laufend [dev] " + formatClock(90*time.Second)
+
+		// Only the header rows: the report and the overview bodies disclose the
+		// running timer as well, and those notes are left-aligned on purpose.
+		lines := strings.Split(app.View(), "\n")[:chromeHeight(height)-1]
+		var found bool
+		for _, line := range lines {
+			if !strings.Contains(line, timer) {
+				continue
+			}
+			found = true
+			// Inside the framed header the line closes with a space of gutter and
+			// the border column, so the timer has to be the last thing before them.
+			tail := strings.TrimRight(strings.TrimSuffix(strings.TrimRight(line, " "), "│"), " ")
+			if !strings.HasSuffix(tail, timer) {
+				t.Errorf("mode %d: timer is not flush right: %q", m, line)
+			}
+			if col := strings.Index(line, "▶"); col*2 < width {
+				t.Errorf("mode %d: timer starts at column %d, want the right half of %d: %q",
+					m, col, width, line)
+			}
+		}
+		if !found {
+			t.Errorf("mode %d: header lost the running timer:\n%s", m, strings.Join(lines, "\n"))
+		}
+	}
+}
+
+// TestQuitKeyIsReachableOnAShortTerminal: at 100x20 the quit key used to be
+// discoverable nowhere — the footer cut off "q ende" and the help body was
+// clipped before "q beenden". Neither view scrolls, so both have to fit.
+func TestQuitKeyIsReachableOnAShortTerminal(t *testing.T) {
+	now := time.Now()
+	frames := []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "alpha", now.Add(-2*time.Hour), time.Hour),
+	}
+	for _, width := range []int{80, 100} {
+		app := chromeApp(t, now, width, 20, frames)
+		app.mode = modeList
+		if out := app.View(); !strings.Contains(out, "q ende") {
+			t.Errorf("%dx20 list: footer must name the quit key:\n%s", width, out)
+		}
+		app.mode = modeHelp
+		out := app.View()
+		var found bool
+		for _, line := range strings.Split(out, "\n") {
+			if strings.Contains(line, "beenden") && strings.Contains(line, "q") {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("%dx20 help: the quit key must survive the panel:\n%s", width, out)
+		}
+	}
+}

@@ -62,39 +62,71 @@ func panel(title, body string, width int, focused bool) string {
 
 // renderFooter draws the key hints. An error replaces them: a failed write is
 // more urgent than a reminder of which key moves the cursor.
-func renderFooter(width int, hints, errMsg string) string {
+func renderFooter(width int, hints []string, errMsg string) string {
 	avail := width - 2 // one leading space, one column of margin on the right
 	if avail < 1 {
 		return ""
 	}
 	if errMsg != "" {
+		// Cut, not shed: an error is one sentence, and its beginning says what
+		// failed. The ellipsis truncate leaves marks that there is more.
 		return " " + styleError.Render(truncate(errMsg, avail))
 	}
-	return " " + styleDim.Render(truncate(hints, avail))
+	return " " + styleDim.Render(fitHints(hints, avail))
 }
 
-// footerHints lists the keys that work in the given mode.
-func footerHints(m mode) string {
+// hintSep separates two key hints in the footer.
+const hintSep = " · "
+
+// fitHints joins the hints that fit avail columns and drops the rest from the
+// tail. Whole hints only: the list mode alone needs 116 columns, so on any
+// normal terminal something has to go, and a footer ending in "q en" reads as a
+// key that does not exist. Callers order their hints by how badly the user needs
+// them, so what goes is what the help screen can still teach.
+func fitHints(hints []string, avail int) string {
+	var kept []string
+	used := 0
+	for _, h := range hints {
+		w := lipgloss.Width(h)
+		if len(kept) > 0 {
+			w += lipgloss.Width(hintSep)
+		}
+		if used+w > avail {
+			break
+		}
+		used += w
+		kept = append(kept, h)
+	}
+	return strings.Join(kept, hintSep)
+}
+
+// footerHints lists the keys that work in the given mode, most important first
+// — renderFooter drops from the tail. Help and quit come before the keys the
+// help screen still lists, because they are the two the user cannot look up any
+// other way once they are gone.
+func footerHints(m mode) []string {
 	switch m {
 	case modeForm:
-		return "tab Feld · → Vorschlag · enter speichern · esc abbrechen"
+		return []string{"tab Feld", "→ Vorschlag", "enter speichern", "esc abbrechen"}
 	case modeReport:
-		return "t/w/m Zeitraum · [ ] verschieben · esc zurück"
+		return []string{"t/w/m Zeitraum", "[ ] verschieben", "esc zurück"}
 	case modeOverview:
-		return "esc zurück"
+		return []string{"esc zurück"}
 	case modeStartTimer:
-		return "tab Feld · → Vorschlag · enter starten · esc abbrechen"
+		return []string{"tab Feld", "→ Vorschlag", "enter starten", "esc abbrechen"}
 	case modeConfirmDelete:
-		return "y löschen · andere Taste abbrechen"
+		return []string{"y löschen", "andere Taste abbrechen"}
 	case modeConfirmCancel:
-		return "y verwerfen · andere Taste abbrechen"
+		return []string{"y verwerfen", "andere Taste abbrechen"}
 	case modeHelp:
-		return "beliebige Taste schließt die Hilfe"
+		return []string{"beliebige Taste schließt die Hilfe"}
 	case modeFatal:
-		return "beliebige Taste beendet watson-tui"
+		return []string{"beliebige Taste beendet watson-tui"}
 	default:
-		return "j/k bewegen · enter bearbeiten · n neu · d löschen · " +
-			"s timer · / filtern · r report · o übersicht · ? hilfe · q ende"
+		return []string{
+			"j/k bewegen", "enter bearbeiten", "? hilfe", "q ende", "n neu",
+			"d löschen", "s timer", "/ filtern", "r report", "o übersicht",
+		}
 	}
 }
 
@@ -162,7 +194,13 @@ func spread(left, right string, width int) string {
 		return ""
 	}
 	if left == "" {
-		return clipWidth(right, width)
+		// Padded, not just clipped: the header's second row is the running timer
+		// in every mode, and every mode but the list leaves the field beside it
+		// empty. Returning the value bare would put the timer at the left edge —
+		// the spec has it bottom right, and that is where the eye looks for it
+		// when the mode changes but the timer keeps running.
+		right = clipWidth(right, width)
+		return strings.Repeat(" ", max(width-lipgloss.Width(right), 0)) + right
 	}
 	if right == "" {
 		return clipWidth(left, width)

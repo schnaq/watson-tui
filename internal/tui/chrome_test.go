@@ -105,11 +105,11 @@ func TestPanelStaysInsideNarrowWidths(t *testing.T) {
 
 // TestFooterShowsHintsOrError: the error replaces the hints, it does not append.
 func TestFooterShowsHintsOrError(t *testing.T) {
-	hints := renderFooter(80, "j/k bewegen", "")
+	hints := renderFooter(80, []string{"j/k bewegen"}, "")
 	if !strings.Contains(hints, "j/k bewegen") {
 		t.Errorf("footer lost its hints: %q", hints)
 	}
-	failed := renderFooter(80, "j/k bewegen", "Speichern fehlgeschlagen")
+	failed := renderFooter(80, []string{"j/k bewegen"}, "Speichern fehlgeschlagen")
 	if !strings.Contains(failed, "Speichern fehlgeschlagen") {
 		t.Errorf("footer lost the error: %q", failed)
 	}
@@ -143,7 +143,7 @@ func TestFooterHintsPerMode(t *testing.T) {
 		modeFatal:         {"beendet"},
 	}
 	for m, wants := range cases {
-		got := footerHints(m)
+		got := strings.Join(footerHints(m), hintSep)
 		if got == "" {
 			t.Errorf("mode %d has no hints", m)
 			continue
@@ -316,5 +316,91 @@ func TestHeaderStaysInsideNarrowWidths(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// TestSpreadKeepsTheRightFieldRight: a row without a left field must still put
+// its right field at the last column. Every mode but the list passes an empty
+// left field on the header's second row, and that row is the running timer — the
+// spec puts it bottom right in every mode, so an unpadded return value moved it
+// to the bottom left in eight of nine modes.
+func TestSpreadKeepsTheRightFieldRight(t *testing.T) {
+	const right = "▶ schnaq 1:23:45"
+	for width := 1; width <= 40; width++ {
+		out := spread("", right, width)
+		if w := lipgloss.Width(out); w != width {
+			t.Errorf("width %d: line is %d wide: %q", width, w, out)
+		}
+		clipped := clipWidth(right, width)
+		if !strings.HasSuffix(out, clipped) {
+			t.Errorf("width %d: %q does not end in the right field", width, out)
+		}
+		// The padding has to sit in front of the value, not behind it. (A clip can
+		// land on a space inside the value, so a trailing space proves nothing.)
+		if lipgloss.Width(clipped) < width && !strings.HasPrefix(out, " ") {
+			t.Errorf("width %d: right field is not padded to the right edge: %q", width, out)
+		}
+	}
+}
+
+// TestFooterShedsWholeHints: the list hints are 116 columns, so on any normal
+// terminal some have to go. They go from the tail and they go whole — a footer
+// ending in "q en" or a dangling separator is worse than one hint fewer.
+func TestFooterShedsWholeHints(t *testing.T) {
+	hints := footerHints(modeList)
+	whole := map[string]bool{}
+	for _, h := range hints {
+		whole[h] = true
+	}
+	for width := 0; width <= 140; width++ {
+		out := renderFooter(width, hints, "")
+		if w := lipgloss.Width(out); w > width {
+			t.Errorf("width %d: footer is %d wide: %q", width, w, out)
+		}
+		body := strings.TrimSpace(out)
+		if body == "" {
+			continue
+		}
+		if strings.Contains(body, "…") {
+			t.Errorf("width %d: a hint was cut instead of dropped: %q", width, out)
+		}
+		if strings.HasPrefix(body, "·") || strings.HasSuffix(body, "·") {
+			t.Errorf("width %d: dangling separator: %q", width, out)
+		}
+		for _, part := range strings.Split(body, hintSep) {
+			if !whole[part] {
+				t.Errorf("width %d: %q is not a whole hint of %v", width, part, hints)
+			}
+		}
+	}
+}
+
+// TestFooterKeepsHelpAndQuitAt80: below 100 columns the tail of the list hints
+// used to be cut off, and the two keys that were cut first were the two that
+// must never become undiscoverable. They now come before the keys the help
+// screen can still teach, so both survive the narrowest terminal this UI
+// targets.
+func TestFooterKeepsHelpAndQuitAt80(t *testing.T) {
+	for _, width := range []int{80, 100, 120} {
+		out := renderFooter(width, footerHints(modeList), "")
+		for _, want := range []string{"? hilfe", "q ende"} {
+			if !strings.Contains(out, want) {
+				t.Errorf("width %d: footer lost %q: %q", width, want, out)
+			}
+		}
+	}
+}
+
+// TestHelpViewFitsTwentyLines: the help screen does not scroll, so fitBody cuts
+// whatever does not fit — from the bottom of the list, where the quit key sits.
+// The budget is taken from the code, not from a literal, so a change to the
+// collapse thresholds cannot silently make the help screen too long again.
+func TestHelpViewFitsTwentyLines(t *testing.T) {
+	const height = 20
+	// The panel spends two lines on its border, the chrome the rest.
+	budget := height - chromeHeight(height) - 2
+	if lines := strings.Count(helpView(), "\n") + 1; lines > budget {
+		t.Errorf("help body has %d lines, a %d-line terminal fits %d — the tail "+
+			"of the list would be clipped:\n%s", lines, height, budget, helpView())
 	}
 }

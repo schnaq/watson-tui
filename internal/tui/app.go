@@ -512,18 +512,20 @@ func (a *App) View() string {
 }
 
 func helpView() string {
-	return `  j/k, ↓/↑      navigieren
-  enter         Frame editieren
-  n             neuer Frame
-  d             Frame löschen
-  s             Timer starten/stoppen
-  S             Timer verwerfen (cancel)
-  /             filtern
-  [ / ]         Zeitraum zurück/vor
-  t/w/m/a       Tag/Woche/Monat/alles
-  r             Report
-  o             Übersicht (Abrechnung)
-  R             neu laden
-  ?             diese Hilfe
-  q             beenden`
+	// Twelve lines, one per key group: the help screen does not scroll, and at 20
+	// terminal lines the panel around it fits thirteen. A longer list would lose
+	// its tail to fitBody — and the tail is where the key that quits sits. That
+	// is also why s/S and r/o share a line instead of taking two each.
+	return `  j/k, ↓/↑     navigieren
+  enter        Frame editieren
+  n            neuer Frame
+  d            Frame löschen
+  s / S        Timer starten/stoppen · verwerfen
+  /            filtern
+  [ / ]        Zeitraum zurück/vor
+  t/w/m/a      Tag/Woche/Monat/alles
+  r / o        Report · Übersicht (Abrechnung)
+  R            neu laden
+  ?            diese Hilfe
+  q            beenden`
 }
