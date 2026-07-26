@@ -281,7 +281,12 @@ func (l *listModel) renderRow(i int) string {
 		return styleDayHeader.Render(r.title)
 	}
 	fr := r.frame
-	line := fmt.Sprintf("  %s–%s  %7s  %-24s %-28s %s",
+	prefix := "  "
+	if i == l.cursor {
+		prefix = selectionMarker + " "
+	}
+	line := fmt.Sprintf("%s%s–%s  %7s  %-24s %-28s %s",
+		prefix,
 		fr.Start.Local().Format("15:04"),
 		fr.Stop.Local().Format("15:04"),
 		formatDuration(fr.Duration()),
