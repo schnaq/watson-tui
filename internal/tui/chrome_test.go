@@ -155,3 +155,126 @@ func TestFooterHintsPerMode(t *testing.T) {
 		}
 	}
 }
+
+// TestChromeHeightCollapses: the chrome must not eat the list on short
+// terminals, so it sheds the header in two steps.
+func TestChromeHeightCollapses(t *testing.T) {
+	cases := map[int]int{30: 5, 20: 5, 19: 2, 12: 2, 11: 1, 5: 1}
+	for height, want := range cases {
+		if got := chromeHeight(height); got != want {
+			t.Errorf("chromeHeight(%d) = %d, want %d", height, got, want)
+		}
+	}
+}
+
+// TestHeaderShowsFieldsFramed: at full height the header is framed, carries the
+// version and every field label and value.
+func TestHeaderShowsFieldsFramed(t *testing.T) {
+	rows := [][]headerField{
+		{{"Zeitraum", "Woche 20.07.–26.07."}, {"Frames", "12"}},
+		{{"Filter", "—"}, {"", "▶ schnaq 1:23:45"}},
+	}
+	out := renderHeader(100, 30, "0.1.0", rows)
+	for _, want := range []string{"watson-tui", "0.1.0", "Zeitraum", "Woche 20.07.–26.07.", "Frames", "12", "Filter", "▶ schnaq 1:23:45"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("framed header missing %q:\n%s", want, out)
+		}
+	}
+	if lines := strings.Count(out, "\n") + 1; lines != 4 {
+		t.Errorf("framed header has %d lines, want 4:\n%s", lines, out)
+	}
+}
+
+// TestHeaderCollapsesToOneLine: between 12 and 19 lines the header keeps the
+// values but drops the frame.
+func TestHeaderCollapsesToOneLine(t *testing.T) {
+	rows := [][]headerField{
+		{{"Zeitraum", "Woche 20.07."}, {"Frames", "12"}},
+		{{"Filter", "—"}, {"", "kein Timer"}},
+	}
+	out := renderHeader(100, 15, "0.1.0", rows)
+	if lines := strings.Count(out, "\n") + 1; lines != 1 {
+		t.Errorf("collapsed header has %d lines, want 1: %q", lines, out)
+	}
+	if !strings.Contains(out, "Woche 20.07.") || !strings.Contains(out, "kein Timer") {
+		t.Errorf("collapsed header lost context: %q", out)
+	}
+	if strings.Contains(out, "╭") {
+		t.Errorf("collapsed header must not draw a frame: %q", out)
+	}
+}
+
+// TestHeaderVanishesOnTinyTerminals: below 12 lines every row belongs to the body.
+func TestHeaderVanishesOnTinyTerminals(t *testing.T) {
+	rows := [][]headerField{{{"Zeitraum", "Woche"}, {"Frames", "1"}}}
+	if out := renderHeader(100, 10, "0.1.0", rows); out != "" {
+		t.Errorf("header must be empty at height 10, got %q", out)
+	}
+}
+
+// TestHeaderRespectsWidth: no rendered line may exceed the terminal width.
+func TestHeaderRespectsWidth(t *testing.T) {
+	rows := [][]headerField{
+		{{"Zeitraum", strings.Repeat("lang ", 30)}, {"Frames", "999"}},
+		{{"Filter", strings.Repeat("filter ", 20)}, {"", "▶ projekt 1:23:45"}},
+	}
+	for _, width := range []int{40, 80, 100} {
+		for _, height := range []int{30, 15} {
+			out := renderHeader(width, height, "0.1.0", rows)
+			for i, line := range strings.Split(out, "\n") {
+				if w := lipgloss.Width(line); w > width {
+					t.Errorf("width %d height %d line %d is %d wide: %q", width, height, i, w, line)
+				}
+			}
+		}
+	}
+}
+
+// TestHeaderCutsBetweenAnsiSequences: header values arrive pre-styled — the
+// running timer is green, the filter comes from a bubbles input — so a value
+// that has to be shortened must be cut by display width, between the escape
+// sequences. A rune-based cut counts the escapes, fires on a value that would
+// have fit, lands inside a sequence and drops the trailing reset, which bleeds
+// the colour across the rest of the screen. Both branches that shorten a value
+// are covered: the framed one and the single line.
+func TestHeaderCutsBetweenAnsiSequences(t *testing.T) {
+	// Display width 60, but 69 runes, so it has to be cut at width 40 either way.
+	long := "\x1b[31m" + strings.Repeat("a", 60) + "\x1b[0m"
+	rows := [][]headerField{{{"Zeitraum", long}, {"Frames", "999"}}}
+	for _, height := range []int{30, 15} {
+		out := renderHeader(40, height, "0.1.0", rows)
+		for i, line := range strings.Split(out, "\n") {
+			start := strings.Index(line, "\x1b[31m")
+			if start < 0 {
+				continue
+			}
+			if !strings.Contains(line[start:], "\x1b[0m") {
+				t.Errorf("height %d line %d opens a colour and never closes it: %q",
+					height, i, line)
+			}
+		}
+	}
+}
+
+// TestHeaderStaysInsideNarrowWidths: the width promise has to hold at the
+// bottom end too. panel already refuses to draw below four columns, but the
+// single-line branch composes its own line out of a leading space and the
+// spread values, so it needs the same guard the footer has — otherwise a
+// two-column line lands on a one-column terminal.
+func TestHeaderStaysInsideNarrowWidths(t *testing.T) {
+	rows := [][]headerField{
+		{{"Zeitraum", "Woche 20.07."}, {"Frames", "12"}},
+		{{"Filter", "—"}, {"", "▶ schnaq 1:23:45"}},
+	}
+	for width := 0; width <= 10; width++ {
+		for _, height := range []int{30, 15} {
+			out := renderHeader(width, height, "0.1.0", rows)
+			for i, line := range strings.Split(out, "\n") {
+				if w := lipgloss.Width(line); w > width {
+					t.Errorf("width %d height %d: line %d is %d wide: %q",
+						width, height, i, w, line)
+				}
+			}
+		}
+	}
+}
