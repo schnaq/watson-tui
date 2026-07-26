@@ -281,3 +281,31 @@ func TestTruncateGuard(t *testing.T) {
 		}
 	}
 }
+
+// TestOverviewDropNoteSurvivesShortTerminals: fitBody keeps the head of the
+// body, so a note below the table drops off the screen as soon as there are more
+// projects than rows — and then a missing column is silent again, this time
+// because of the height rather than the width. That is why the note sits above
+// the table: cut rows are obvious to whoever booked them, a cut note is not.
+func TestOverviewDropNoteSurvivesShortTerminals(t *testing.T) {
+	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
+	monday := time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local)
+	var frames []watson.Frame
+	for i := 0; i < 9; i++ {
+		frames = append(frames, mkFrame(
+			strings.Repeat("a", 31)+string(rune('a'+i)), "kunde-"+string(rune('a'+i)),
+			monday.Add(time.Duration(i)*time.Hour), 30*time.Minute))
+	}
+	for _, height := range []int{30, 20, 15, 12} {
+		app := newTestApp(t)
+		app.Update(tea.WindowSizeMsg{Width: 60, Height: height})
+		app.frames = frames
+		app.now = now
+		app.mode = modeOverview
+		out := app.View()
+		if !strings.Contains(out, "zu schmal für") {
+			t.Errorf("60x%d: the note about the dropped column must survive the "+
+				"height cut:\n%s", height, out)
+		}
+	}
+}

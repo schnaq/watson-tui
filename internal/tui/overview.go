@@ -211,6 +211,15 @@ func overviewView(frames []watson.Frame, state *watson.State, weekStart time.Wee
 	keep, dropped, projW, cellW := overviewFit(width, len(cols))
 
 	var b strings.Builder
+	if len(dropped) > 0 {
+		// Above the table, not below it: fitBody keeps the head of the body, so a
+		// note under the totals falls off the screen as soon as there are more
+		// projects than rows — and a column missing without a word is exactly what
+		// this note exists to prevent. Cut rows are obvious to whoever booked
+		// them; a cut note is not. Wrapped, because on the narrow terminal that
+		// dropped a column the list of names is longer than the line.
+		b.WriteString(styleDim.Width(width).Render(droppedNote(cols, dropped)) + "\n\n")
+	}
 	fmt.Fprintf(&b, "%-*s", projW, truncate("Projekt", projW))
 	for _, i := range keep {
 		fmt.Fprintf(&b, " %*s", cellW, columnHeader(cols[i], cellW))
@@ -231,12 +240,6 @@ func overviewView(frames []watson.Frame, state *watson.State, weekStart time.Wee
 		totalLine += fmt.Sprintf(" %*s", cellW, truncate(cellDuration(totals[i]), cellW))
 	}
 	b.WriteString("\n" + styleTitle.Render(totalLine))
-	if len(dropped) > 0 {
-		// Wrapped, not cut: the note is the only trace a dropped column leaves,
-		// and on the narrow terminal that dropped it the list of names is
-		// longer than the line.
-		b.WriteString("\n\n" + styleDim.Width(width).Render(droppedNote(cols, dropped)))
-	}
 	if state != nil {
 		b.WriteString("\n\n" + styleRunning.Render(runningNote(state, cols, weekStart, now, projW)))
 	}
