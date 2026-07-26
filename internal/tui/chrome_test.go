@@ -27,12 +27,49 @@ func TestPanelFramesBodyAndTitle(t *testing.T) {
 }
 
 // TestPanelTruncatesLongTitle: a title wider than the frame must not push the
-// border past the given width.
+// border past the given width. This is the branch where the label is truncated
+// right up to its cap (len(label) == inner-4), which leaves exactly one dash
+// between label and corner — the tightest case for the corner arithmetic. So
+// assert the exact width, not just an upper bound, across both parities.
 func TestPanelTruncatesLongTitle(t *testing.T) {
-	out := panel(strings.Repeat("sehr langer titel ", 5), "body", 30, false)
+	for _, width := range []int{30, 37, 40} {
+		out := panel(strings.Repeat("sehr langer titel ", 5), "body", width, false)
+		for i, line := range strings.Split(out, "\n") {
+			if w := lipgloss.Width(line); w != width {
+				t.Errorf("width %d: line %d is %d wide, want %d: %q",
+					width, i, w, width, line)
+			}
+		}
+	}
+}
+
+// TestPanelKeepsAnsiBodyLinesIntact: body lines arrive pre-styled from the
+// views, so panel measures their display width instead of their rune count.
+// Without that guard the escapes inflate the count, truncate fires on a line
+// that fits, and the cut lands past the text — dropping the trailing reset and
+// bleeding the colour across the rest of the terminal.
+//
+// lipgloss.Width parses the escapes out of the string itself, so it does not
+// care that the no-TTY renderer strips styling under go test: a literal escape
+// written here is measured at its display width all the same.
+func TestPanelKeepsAnsiBodyLinesIntact(t *testing.T) {
+	// Display width 30, but 39 runes. At width 40 the body may use inner-2 = 36
+	// columns, so this line fits and must be passed through untouched.
+	body := "\x1b[31m" + strings.Repeat("a", 30) + "\x1b[0m"
+	out := panel("", body, 40, false)
+
+	if !strings.Contains(out, body) {
+		t.Errorf("panel altered a body line that fits:\nwant substring %q\ngot\n%q", body, out)
+	}
+	if !strings.Contains(out, "\x1b[0m") {
+		t.Errorf("panel dropped the reset escape, the colour would bleed:\n%q", out)
+	}
+	if strings.Contains(out, "…") {
+		t.Errorf("panel truncated a line that fits:\n%q", out)
+	}
 	for i, line := range strings.Split(out, "\n") {
-		if w := lipgloss.Width(line); w > 30 {
-			t.Errorf("line %d is %d wide, want <= 30: %q", i, w, line)
+		if w := lipgloss.Width(line); w != 40 {
+			t.Errorf("line %d is %d wide, want 40: %q", i, w, line)
 		}
 	}
 }
