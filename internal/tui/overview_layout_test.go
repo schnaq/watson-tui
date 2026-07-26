@@ -160,6 +160,48 @@ func TestOverviewNarrowKeepsExactDurations(t *testing.T) {
 	}
 }
 
+// TestOverviewDropOrderIsPriority pins the sequence in which value columns are
+// given up. Only "gesamt survives last" was pinned, so the middle of the order
+// was free: mutating overviewDropOrder from {1,3,2,0} to {1,2,3,0} — giving up
+// dieser Monat before letzter Monat, the wrong way round for someone writing last
+// month's invoice — left the whole suite green.
+func TestOverviewDropOrderIsPriority(t *testing.T) {
+	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
+	cols := overviewColumns(now, time.Monday)
+	// The documented priority: what an invoice needs least goes first. gesamt is
+	// not in it, so it is the column that always survives.
+	want := []string{"letzte Woche", "letzter Monat", "dieser Monat", "diese Woche"}
+
+	got := make([]string, 0, len(overviewDropOrder))
+	for _, i := range overviewDropOrder {
+		got = append(got, cols[i].title)
+	}
+	if strings.Join(got, " | ") != strings.Join(want, " | ") {
+		t.Errorf("overviewDropOrder = %v, want %v", got, want)
+	}
+
+	// And behaviourally, which is what someone reading the table sees: whatever
+	// overviewFit gave up at a width has to be a prefix of that priority. Between
+	// 42 and 51 columns exactly two are dropped — that is the width where a swapped
+	// middle pair shows.
+	for width := 11; width <= 140; width++ {
+		_, dropped, _, _ := overviewFit(width, len(cols))
+		if len(dropped) > len(want) {
+			t.Fatalf("width %d: %d of %d value columns dropped", width, len(dropped), len(want))
+		}
+		expect := map[string]bool{}
+		for _, name := range want[:len(dropped)] {
+			expect[name] = true
+		}
+		for _, i := range dropped {
+			if !expect[cols[i].title] {
+				t.Errorf("width %d: with %d columns dropped they must be %v, not %q",
+					width, len(dropped), want[:len(dropped)], cols[i].title)
+			}
+		}
+	}
+}
+
 // TestOverviewNamesDroppedColumns: a column that does not fit is dropped whole,
 // so the view has to say so. Otherwise an empty screen reads as "no time booked
 // last week" when it means "last week is not on screen".
