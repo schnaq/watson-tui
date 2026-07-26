@@ -507,8 +507,9 @@ func (a *App) View() string {
 			f.Stop.Local().Format("15:04"),
 			f.ShortID())
 	default:
-		// The list scrolls itself to a height; the others are cut by fitBody.
-		body = a.list.view(content)
+		// The list scrolls itself to a height and lays its rows out against the
+		// body width; the others are cut by fitBody.
+		body = a.list.view(content, bodyWidth)
 	}
 	body = fitBody(body, content, bodyWidth)
 

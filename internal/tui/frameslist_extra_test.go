@@ -87,11 +87,11 @@ func TestListMoveEmpty(t *testing.T) {
 // TestListViewEmptyMessages covers view()'s two empty-state messages.
 func TestListViewEmptyMessages(t *testing.T) {
 	l := newListModel(time.Now())
-	if got := l.view(10); !strings.Contains(got, "keine Frames im Zeitraum") {
+	if got := l.view(10, 80); !strings.Contains(got, "keine Frames im Zeitraum") {
 		t.Errorf("empty view = %q", got)
 	}
 	l.filter = "zzz"
-	if got := l.view(10); !strings.Contains(got, "kein Treffer für Filter »zzz«") {
+	if got := l.view(10, 80); !strings.Contains(got, "kein Treffer für Filter »zzz«") {
 		t.Errorf("no-match view = %q", got)
 	}
 }
@@ -135,7 +135,7 @@ func TestListViewRendersRows(t *testing.T) {
 	l.refresh([]watson.Frame{
 		mkFrame("a1111111111111111111111111111111", "alpha", day, time.Hour, "tag1"),
 	}, time.Monday)
-	out := l.view(10)
+	out := l.view(10, 80)
 	if !strings.Contains(out, "alpha") {
 		t.Errorf("view missing project: %q", out)
 	}
