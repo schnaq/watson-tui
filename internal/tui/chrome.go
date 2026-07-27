@@ -84,10 +84,11 @@ func renderFooter(width int, groups [][]string, errMsg string) string {
 const hintSep = " · "
 
 // shedHints joins the hints that fit avail columns and drops the rest from the
-// tail. Whole hints only: the list mode alone needs 116 columns, so on any
-// normal terminal something has to go, and a footer ending in "q en" reads as a
-// key that does not exist. Callers order their hints by how badly the user needs
-// them, so what goes is what the help screen can still teach.
+// tail. Whole hints only: the list mode's second group alone needs 116 columns,
+// so on any normal terminal something has to go, and a footer ending in "q en"
+// reads as a key that does not exist. Callers order their hints by how badly the
+// user needs them, so what goes is what the help screen can still teach.
+// TestFooterShedsWholeHints asserts the 116 instead of leaving it to rot here.
 //
 // Every hint is measured plain and styled only once it is kept. lipgloss.Width
 // does step over escape sequences, so that order is not what makes the

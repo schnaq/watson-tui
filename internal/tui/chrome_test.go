@@ -587,11 +587,23 @@ func TestSpreadKeepsTheRightFieldRight(t *testing.T) {
 	}
 }
 
-// TestFooterShedsWholeHints: the list hints are 116 columns, so on any normal
-// terminal some have to go. They go from the tail and they go whole — a footer
-// ending in "q en" or a dangling separator is worse than one hint fewer.
+// TestFooterShedsWholeHints: the list hints are 58 and 116 columns, so on any
+// normal terminal some have to go. They go from the tail and they go whole — a
+// footer ending in "q en" or a dangling separator is worse than one hint fewer.
+//
+// Both numbers are asserted, not just recited. shedHints's doc quotes the 116
+// as the reason it exists, and that figure had already gone stale once — it
+// said 116 while the hints measured 109, and only came true again when the
+// English two were said in German. A number a comment leans on is worth a line
+// of test; when this fails, fix the two comments rather than the number.
 func TestFooterShedsWholeHints(t *testing.T) {
 	groups := footerHints(modeList)
+	for i, want := range []int{58, 116} {
+		if got := lipgloss.Width(strings.Join(groups[i], hintSep)); got != want {
+			t.Errorf("list hint group %d is %d columns, the comments here and on "+
+				"shedHints say %d", i, got, want)
+		}
+	}
 	whole := map[string]bool{}
 	for _, g := range groups {
 		for _, h := range g {
