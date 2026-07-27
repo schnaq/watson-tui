@@ -39,15 +39,15 @@ func TestTimerStartPromptFocusAndInput(t *testing.T) {
 func TestTimerStartPromptView(t *testing.T) {
 	app := newTestApp(t)
 	app.Update(key("s"))
-	app.start.errMsg = "Projekt fehlt"
+	app.start.errMsg = "project is missing"
 	out := app.View()
-	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Timer starten") {
+	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Timer starting") {
 		t.Errorf("header must name the prompt: %q", got)
 	}
-	if strings.Contains(app.start.view(), "Timer starten") {
+	if strings.Contains(app.start.view(), "Timer starting") {
 		t.Errorf("body must not repeat the header's title:\n%s", app.start.view())
 	}
-	if !strings.Contains(out, "Projekt fehlt") {
+	if !strings.Contains(out, "project is missing") {
 		t.Error("start prompt view must show the error message")
 	}
 }
@@ -65,7 +65,7 @@ func TestTimerStartAlreadyRunningError(t *testing.T) {
 		t.Fatal(err)
 	}
 	app.Update(key("enter"))
-	if app.mode != modeStartTimer || !strings.Contains(app.start.errMsg, "Start fehlgeschlagen") {
+	if app.mode != modeStartTimer || !strings.Contains(app.start.errMsg, "starting the timer failed") {
 		t.Errorf("start error must stay in prompt with a prefixed message, mode=%v errMsg=%q", app.mode, app.start.errMsg)
 	}
 }
@@ -76,7 +76,7 @@ func TestTimerStopError(t *testing.T) {
 	// state claims a running timer but the store has none → Stop errors.
 	app.state = &watson.State{Project: "ghost", Start: time.Now(), Tags: []string{}}
 	app.Update(key("s"))
-	if !strings.Contains(app.errMsg, "Stop fehlgeschlagen") {
+	if !strings.Contains(app.errMsg, "stop failed") {
 		t.Errorf("stop error must surface in status bar, errMsg = %q", app.errMsg)
 	}
 	if app.mode != modeList {
@@ -84,7 +84,7 @@ func TestTimerStopError(t *testing.T) {
 	}
 }
 
-// TestTimerCancelOtherKeyAborts covers the "andere Taste" branch of the
+// TestTimerCancelOtherKeyAborts covers the "any other key" branch of the
 // confirm-cancel dialog: it returns to the list and keeps the timer.
 func TestTimerCancelOtherKeyAborts(t *testing.T) {
 	store := watson.NewStore(t.TempDir())
@@ -119,7 +119,7 @@ func TestTimerCancelError(t *testing.T) {
 	if app.mode != modeList {
 		t.Fatal("must return to list even on cancel error")
 	}
-	if !strings.Contains(app.errMsg, "Verwerfen fehlgeschlagen") {
+	if !strings.Contains(app.errMsg, "discard failed") {
 		t.Errorf("cancel error must surface in status bar, errMsg = %q", app.errMsg)
 	}
 }

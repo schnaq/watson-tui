@@ -45,15 +45,15 @@ func chromeApp(t *testing.T, now time.Time, width, height int, frames []watson.F
 	app.pendingDelete = app.frames[0]
 	// A running timer with tags: the widest header field there is, and it lands in
 	// the second header row, which is where the width arithmetic is tightest. Left
-	// unset, the sweep only ever measured the short "kein Timer".
+	// unset, the sweep only ever measured the short "no timer".
 	app.state = &watson.State{
 		Project: "ein-ziemlich-langer-projektname", Start: now.Add(-90 * time.Minute),
 		Tags: []string{"tag-eins", "tag-zwei"},
 	}
 	// A realistic fatal message: two lines, the second one a backup path far
 	// wider than a narrow terminal, so the wrapping is exercised as well.
-	app.fatalMsg = "frames-Datei nicht lesbar: invalid character 'k'\n" +
-		"Backup: /var/folders/78/jyqksnb52nx_sm8zb5sj90dh0000gn/T/watson/001/frames.bak"
+	app.fatalMsg = "cannot read the frames file: invalid character 'k'\n" +
+		"backup: /var/folders/78/jyqksnb52nx_sm8zb5sj90dh0000gn/T/watson/001/frames.bak"
 	return app
 }
 
@@ -62,7 +62,7 @@ func TestViewHasHeaderBodyFooter(t *testing.T) {
 	app := newTestApp(t)
 	app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	out := app.View()
-	for _, want := range []string{"watson-tui", "Zeitraum", "j/k bewegen"} {
+	for _, want := range []string{"watson-tui", "Period", "j/k move"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("view missing %q:\n%s", want, out)
 		}
@@ -177,15 +177,15 @@ func TestViewShedsHeaderOnShortTerminals(t *testing.T) {
 		if strings.Contains(out, "watson-tui") {
 			t.Errorf("height %d: header frame must be gone:\n%s", height, out)
 		}
-		if !strings.Contains(out, "j/k bewegen") {
+		if !strings.Contains(out, "j/k move") {
 			t.Errorf("height %d: footer must survive:\n%s", height, out)
 		}
 	}
 	// One line of header at 15, none at 10.
-	if out := chromeApp(t, now, 100, 15, frames).View(); !strings.Contains(out, "alle Frames") {
+	if out := chromeApp(t, now, 100, 15, frames).View(); !strings.Contains(out, "all frames") {
 		t.Errorf("height 15 lost the context line:\n%s", out)
 	}
-	if out := chromeApp(t, now, 100, 10, frames).View(); strings.Contains(out, "alle Frames") {
+	if out := chromeApp(t, now, 100, 10, frames).View(); strings.Contains(out, "all frames") {
 		t.Errorf("height 10 must give every line to the body:\n%s", out)
 	}
 }
@@ -194,12 +194,12 @@ func TestViewShedsHeaderOnShortTerminals(t *testing.T) {
 func TestErrorGoesToFooter(t *testing.T) {
 	app := newTestApp(t)
 	app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	app.errMsg = "Löschen fehlgeschlagen: kaputt"
+	app.errMsg = "delete failed: broken"
 	out := app.View()
-	if !strings.Contains(out, "Löschen fehlgeschlagen: kaputt") {
+	if !strings.Contains(out, "delete failed: broken") {
 		t.Errorf("error missing from view:\n%s", out)
 	}
-	if strings.Contains(out, "j/k bewegen") {
+	if strings.Contains(out, "j/k move") {
 		t.Errorf("error must replace the hints:\n%s", out)
 	}
 }
@@ -212,11 +212,11 @@ func TestHeaderFieldsPerMode(t *testing.T) {
 	app.state = &watson.State{Project: "laufend", Start: now.Add(-time.Minute), Tags: []string{}}
 
 	app.mode = modeList
-	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Zeitraum") || !strings.Contains(got, "Frames") {
+	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Period") || !strings.Contains(got, "frames") {
 		t.Errorf("list header = %q", got)
 	}
 	app.mode = modeOverview
-	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Übersicht") {
+	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Overview") {
 		t.Errorf("overview header = %q", got)
 	}
 	app.mode = modeReport
@@ -235,7 +235,7 @@ func TestHeaderFieldsPerMode(t *testing.T) {
 	app.state = nil
 	for _, m := range chromeModes {
 		app.mode = m
-		if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "kein Timer") {
+		if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "no timer") {
 			t.Errorf("mode %d header lost the idle timer: %q", m, got)
 		}
 	}
@@ -266,8 +266,8 @@ func renderFieldsFlat(rows [][]headerField) string {
 }
 
 // TestViewKeepsTimerBottomRight: the spec puts the running timer in the
-// header's bottom right in every mode ("Feld 4 (rechts unten) ist in jedem
-// Modus der laufende Timer"). Only the list mode fills the bottom left, so the
+// header's bottom right in every mode ("field 4, bottom right, is the running
+// timer in every mode"). Only the list mode fills the bottom left, so the
 // eight modes that leave it empty are the ones that used to move the timer to
 // the left edge. The assertion is its position, not its presence: a test that
 // only looked for the timer stayed green while it sat bottom left.
@@ -311,8 +311,9 @@ func TestViewKeepsTimerBottomRight(t *testing.T) {
 }
 
 // TestQuitKeyIsReachableOnAShortTerminal: at 100x20 the quit key used to be
-// discoverable nowhere — the footer cut off "q ende" and the help body was
-// clipped before "q beenden". Neither view scrolls, so both have to fit.
+// discoverable nowhere — the footer cut off "q quit" and the help body was
+// clipped before its own "q  quit" row. Neither view scrolls, so both have to
+// fit.
 //
 // The heights are the tight ones, and they are tight for different reasons: 20
 // is where the chrome costs six lines and leaves the help twelve, 14 is the
@@ -328,14 +329,14 @@ func TestQuitKeyIsReachableOnAShortTerminal(t *testing.T) {
 		for _, height := range []int{14, 15, 16, 20} {
 			app := chromeApp(t, now, width, height, frames)
 			app.mode = modeList
-			if out := app.View(); !strings.Contains(out, "q ende") {
+			if out := app.View(); !strings.Contains(out, "q quit") {
 				t.Errorf("%dx%d list: footer must name the quit key:\n%s", width, height, out)
 			}
 			app.mode = modeHelp
 			out := app.View()
 			var found bool
 			for _, line := range strings.Split(out, "\n") {
-				if strings.Contains(line, "beenden") && strings.Contains(line, "q") {
+				if strings.Contains(line, "q ") && strings.Contains(line, "quit") {
 					found = true
 				}
 			}
@@ -450,12 +451,12 @@ func TestPeriodFieldShowsItIsShiftable(t *testing.T) {
 	now := time.Now()
 	app := newTestApp(t)
 	for _, u := range []periodUnit{unitDay, unitWeek, unitMonth} {
-		f := app.periodField("Zeitraum", period{unit: u, ref: now})
+		f := app.periodField("Period", period{unit: u, ref: now})
 		if !strings.Contains(f.value, "‹") || !strings.Contains(f.value, "›") {
 			t.Errorf("unit %d must show the shift affordance: %q", u, f.value)
 		}
 	}
-	f := app.periodField("Zeitraum", period{unit: unitAll, ref: now})
+	f := app.periodField("Period", period{unit: unitAll, ref: now})
 	if strings.Contains(f.value, "‹") {
 		t.Errorf("unitAll cannot be shifted, so no affordance: %q", f.value)
 	}
@@ -477,16 +478,16 @@ func TestSumFieldMatchesTheListAndFlagsTheTimer(t *testing.T) {
 	if !strings.Contains(f.value, "2h 30m") {
 		t.Errorf("sum = %q, want 2h 30m", f.value)
 	}
-	if strings.Contains(f.value, "läuft") {
+	if strings.Contains(f.value, "running") {
 		t.Errorf("no timer runs, so no flag: %q", f.value)
 	}
 
-	app.state = &watson.State{Project: "läuft", Start: now.Add(-time.Hour), Tags: []string{}}
+	app.state = &watson.State{Project: "p", Start: now.Add(-time.Hour), Tags: []string{}}
 	f = app.sumFieldWithoutRunning(app.frames, p)
 	if !strings.Contains(f.value, "2h 30m") {
 		t.Errorf("running timer must not change the sum: %q", f.value)
 	}
-	if !strings.Contains(f.value, "läuft") {
+	if !strings.Contains(f.value, "running") {
 		t.Errorf("running timer must be flagged: %q", f.value)
 	}
 }
@@ -522,9 +523,9 @@ func TestHeaderSumAddsUpToTheDayTotals(t *testing.T) {
 		// call site, and the constraint is about what the user reads.
 		// Equality, not Contains: "1h 00m" is a substring of "11h 00m", so a
 		// header that counted too much would pass a contains-check.
-		got, ok := headerFieldByLabel(app.headerFields(), "Summe")
+		got, ok := headerFieldByLabel(app.headerFields(), "Total")
 		if !ok {
-			t.Fatalf("filter %q: the list header has no Summe field", filter)
+			t.Fatalf("filter %q: the list header has no Total field", filter)
 		}
 		if want := formatDuration(days); got != want {
 			t.Errorf("filter %q: header sum %q, day totals %q", filter, got, want)
@@ -559,19 +560,19 @@ func bodyDurations(t *testing.T, body, label string) []string {
 	return nil
 }
 
-// TestReportHeaderSumEqualsTheBodysGesamt is the invariant the report header
-// exists for, and the one it violated: the header said "2h 00m + läuft" over a
-// body that said "Gesamt 3h 00m" and "▶ … läuft … und ist eingerechnet". Two
-// numbers for one period, and two annotations contradicting each other about
-// whether the running hour is inside the number — in the view an invoice is
-// written from.
+// TestReportHeaderSumEqualsTheBodysTotal is the invariant the report header
+// exists for, and the one it violated: the header said "2h 00m + running" over
+// a body that said "Total 3h 00m" and "▶ … running (…), included". Two numbers
+// for one period, and two annotations contradicting each other about whether
+// the running hour is inside the number — in the view an invoice is written
+// from.
 //
-// Asserted against the body's own Gesamt, not against "3h 00m": a literal pins
+// Asserted against the body's own Total, not against "3h 00m": a literal pins
 // this fixture, whereas the header has to agree with the body whatever the
 // frames are. The last check is what makes the fixture load-bearing — the
 // running timer must actually move the number, or a header that ignored it
 // entirely would pass by coincidence.
-func TestReportHeaderSumEqualsTheBodysGesamt(t *testing.T) {
+func TestReportHeaderSumEqualsTheBodysTotal(t *testing.T) {
 	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
 	app := newTestApp(t)
 	app.now = now
@@ -583,18 +584,18 @@ func TestReportHeaderSumEqualsTheBodysGesamt(t *testing.T) {
 	}
 	app.state = &watson.State{Project: "kunde-a", Start: now.Add(-time.Hour), Tags: []string{}}
 
-	head, ok := headerFieldByLabel(app.headerFields(), "Summe")
+	head, ok := headerFieldByLabel(app.headerFields(), "Total")
 	if !ok {
-		t.Fatal("the report header has no Summe field")
+		t.Fatal("the report header has no Total field")
 	}
 	body := app.report.view(app.frames, app.state, app.cfg.WeekStart, app.now, app.width)
-	gesamt := bodyDurations(t, body, "Gesamt")
-	if want := gesamt[len(gesamt)-1]; head != want {
-		t.Errorf("header sum %q, body Gesamt %q", head, want)
+	total := bodyDurations(t, body, "Total")
+	if want := total[len(total)-1]; head != want {
+		t.Errorf("header sum %q, body Total %q", head, want)
 	}
 	// The body says the timer is counted; a flag that reads "not counted" on a
 	// number that counts it is worse than no flag.
-	if strings.Contains(head, "läuft") {
+	if strings.Contains(head, "running") {
 		t.Errorf("the report counts the timer, so its sum must not be flagged: %q", head)
 	}
 	if without := formatDuration(sumInPeriod(app.frames, app.report.per, app.cfg.WeekStart)); head == without {
@@ -602,10 +603,10 @@ func TestReportHeaderSumEqualsTheBodysGesamt(t *testing.T) {
 	}
 }
 
-// TestOverviewHeaderSumEqualsTheGesamtColumn: the overview's header number is
+// TestOverviewHeaderSumEqualsTheTotalColumn: the overview's header number is
 // correct today, and this keeps it that way. Same shape as the report's test,
-// against the last cell of the table's Gesamt row — the column billing reads.
-func TestOverviewHeaderSumEqualsTheGesamtColumn(t *testing.T) {
+// against the last cell of the table's Total row — the column billing reads.
+func TestOverviewHeaderSumEqualsTheTotalColumn(t *testing.T) {
 	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
 	app := newTestApp(t)
 	app.now = now
@@ -618,16 +619,16 @@ func TestOverviewHeaderSumEqualsTheGesamtColumn(t *testing.T) {
 	}
 	app.state = &watson.State{Project: "kunde-a", Start: now.Add(-time.Hour), Tags: []string{}}
 
-	head, ok := headerFieldByLabel(app.headerFields(), "Summe gesamt")
+	head, ok := headerFieldByLabel(app.headerFields(), "Total, all")
 	if !ok {
-		t.Fatal("the overview header has no Summe gesamt field")
+		t.Fatal("the overview header has no \"Total, all\" field")
 	}
 	body := overviewView(app.frames, app.state, app.cfg.WeekStart, app.now, app.width)
-	cells := bodyDurations(t, body, "Gesamt")
+	cells := bodyDurations(t, body, "Total")
 	if want := cells[len(cells)-1]; head != want {
-		t.Errorf("header sum %q, gesamt column %q", head, want)
+		t.Errorf("header sum %q, Total column %q", head, want)
 	}
-	if strings.Contains(head, "läuft") {
+	if strings.Contains(head, "running") {
 		t.Errorf("the overview counts the timer, so its sum must not be flagged: %q", head)
 	}
 	if without := formatDuration(sumInPeriod(app.frames, period{unit: unitAll, ref: now}, app.cfg.WeekStart)); head == without {
@@ -649,22 +650,22 @@ func TestOverviewHeaderSumEqualsTheGesamtColumn(t *testing.T) {
 // The order is asserted because it is part of the contract: the period before
 // the current one first, the larger period containing it second (see
 // comparisonPeriods), which is the order the spec renders as
-// "Vorwoche … · Monat …".
+// "Prev week … · Month …".
 func TestComparisonRowNamesNeighbours(t *testing.T) {
 	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
 	app := newTestApp(t)
 	app.now = now
 	app.frames = []watson.Frame{
 		mkFrame("a1111111111111111111111111111111", "p",
-			time.Date(2026, 7, 14, 9, 0, 0, 0, time.Local), 5*time.Hour), // Vorwoche und Monat
+			time.Date(2026, 7, 14, 9, 0, 0, 0, time.Local), 5*time.Hour), // prev week and month
 		mkFrame("b2222222222222222222222222222222", "p",
-			time.Date(2026, 7, 21, 9, 0, 0, 0, time.Local), 2*time.Hour), // nur Monat
+			time.Date(2026, 7, 21, 9, 0, 0, 0, time.Local), 2*time.Hour), // month only
 		mkFrame("c3333333333333333333333333333333", "p",
-			time.Date(2026, 6, 30, 9, 0, 0, 0, time.Local), time.Hour), // weder noch
+			time.Date(2026, 6, 30, 9, 0, 0, 0, time.Local), time.Hour), // neither
 	}
 	want := []headerField{
-		{label: "Vorwoche", value: "5h 00m"},
-		{label: "Monat", value: "7h 00m"},
+		{label: "Prev week", value: "5h 00m"},
+		{label: "Month", value: "7h 00m"},
 	}
 	row := app.comparisonRow(app.frames, period{unit: unitWeek, ref: now})
 	if len(row) != len(want) {
@@ -680,7 +681,7 @@ func TestComparisonRowNamesNeighbours(t *testing.T) {
 	}
 }
 
-// TestComparisonRowFollowsTheListFilter: with a filter active the Summe narrows
+// TestComparisonRowFollowsTheListFilter: with a filter active the Total narrows
 // to the filtered frames, so the neighbours beside it have to narrow too.
 // Summing every frame made them describe a different set than the number they
 // sit next to, with nothing on screen saying so — the reader has no way to tell
@@ -702,7 +703,7 @@ func TestComparisonRowFollowsTheListFilter(t *testing.T) {
 	}
 	app.list.per = period{unit: unitWeek, ref: now}.shift(app.cfg.WeekStart, 0)
 
-	cases := []struct{ filter, vorwoche, monat string }{
+	cases := []struct{ filter, prevWeek, month string }{
 		{"", "8h 00m", "10h 00m"},
 		{"schnaq", "5h 00m", "7h 00m"},
 	}
@@ -711,7 +712,7 @@ func TestComparisonRowFollowsTheListFilter(t *testing.T) {
 		app.list.refresh(app.frames, app.cfg.WeekStart)
 		fields := app.headerFields()
 		for _, want := range []struct{ label, value string }{
-			{"Vorwoche", tc.vorwoche}, {"Monat", tc.monat},
+			{"Prev week", tc.prevWeek}, {"Month", tc.month},
 		} {
 			got, ok := headerFieldByLabel(fields, want.label)
 			if !ok {
@@ -724,10 +725,10 @@ func TestComparisonRowFollowsTheListFilter(t *testing.T) {
 	}
 }
 
-// TestReportComparisonCountsTheRunningTimer: the report's Summe counts the
+// TestReportComparisonCountsTheRunningTimer: the report's Total counts the
 // running timer, so its neighbours have to as well. Otherwise the month renders
-// smaller than the week it contains — "Summe 3h 00m" beside "Monat 2h 00m" — and
-// nothing on screen explains the difference.
+// smaller than the week it contains — "Total 3h 00m" beside "Month 2h 00m" —
+// and nothing on screen explains the difference.
 func TestReportComparisonCountsTheRunningTimer(t *testing.T) {
 	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
 	app := newTestApp(t)
@@ -743,16 +744,16 @@ func TestReportComparisonCountsTheRunningTimer(t *testing.T) {
 	fields := app.headerFields()
 	month := period{unit: unitMonth, ref: app.report.per.ref}
 	_, want := aggregate(withRunning(app.frames, app.state, app.now), month, app.cfg.WeekStart)
-	got, ok := headerFieldByLabel(fields, "Monat")
+	got, ok := headerFieldByLabel(fields, "Month")
 	if !ok {
-		t.Fatal("the report header has no Monat field")
+		t.Fatal("the report header has no Month field")
 	}
 	// Pinned to the month's own aggregate rather than to "the month is at least
 	// the week": both sides of that comparison would be computed here from the
 	// same frames, so it would hold whatever comparisonRow returned. Equality with
 	// the timer counted gives the containment for free.
 	if got != formatDuration(want) {
-		t.Errorf("Monat = %q, want %q", got, formatDuration(want))
+		t.Errorf("Month = %q, want %q", got, formatDuration(want))
 	}
 	if without := formatDuration(sumInPeriod(app.frames, month, app.cfg.WeekStart)); got == without {
 		t.Fatalf("the fixture's timer contributes nothing to the month (also %q)", without)
@@ -789,12 +790,12 @@ func TestViewDropsComparisonRowBeforeTheFrame(t *testing.T) {
 	app.list.refresh(app.frames, time.Monday)
 
 	app.Update(tea.WindowSizeMsg{Width: 100, Height: 26})
-	if !strings.Contains(app.View(), "Vorwoche") {
+	if !strings.Contains(app.View(), "Prev week") {
 		t.Error("at 26 lines the comparison row belongs in the header")
 	}
 	app.Update(tea.WindowSizeMsg{Width: 100, Height: 21})
 	out := app.View()
-	if strings.Contains(out, "Vorwoche") {
+	if strings.Contains(out, "Prev week") {
 		t.Errorf("at 21 lines the comparison row must give way:\n%s", out)
 	}
 	if !strings.Contains(out, "╭") {
@@ -811,7 +812,7 @@ func TestViewShowsPeriodKeysInTheFooter(t *testing.T) {
 		if !strings.Contains(out, "← →") {
 			t.Errorf("%dx%d: the period keys must be visible:\n%s", size.Width, size.Height, out)
 		}
-		if !strings.Contains(out, "q ende") {
+		if !strings.Contains(out, "q quit") {
 			t.Errorf("%dx%d: the quit key must be visible:\n%s", size.Width, size.Height, out)
 		}
 	}
@@ -888,7 +889,7 @@ func TestArrowKeysStayOutOfTheFilterInput(t *testing.T) {
 func TestFooterNamesTheArrowKeys(t *testing.T) {
 	app := newTestApp(t)
 	app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	if out := app.View(); !strings.Contains(out, "← → Zeitraum") {
+	if out := app.View(); !strings.Contains(out, "← → period") {
 		t.Errorf("footer must name the arrow keys:\n%s", out)
 	}
 }

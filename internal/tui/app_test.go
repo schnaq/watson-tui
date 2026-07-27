@@ -98,7 +98,7 @@ func TestHelpToggle(t *testing.T) {
 	if !strings.Contains(out, panelTitle(modeHelp)) {
 		t.Errorf("help panel missing its title:\n%s", out)
 	}
-	if !strings.Contains(out, "neuer Frame") {
+	if !strings.Contains(out, "new frame") {
 		t.Errorf("help view missing the key list:\n%s", out)
 	}
 	app.Update(key("x"))
@@ -155,7 +155,7 @@ func TestDeleteFlowWithConfirm(t *testing.T) {
 	if app.mode != modeConfirmDelete || app.pendingDelete.ID != added.ID {
 		t.Fatal("d must ask for confirmation")
 	}
-	app.Update(key("x")) // abbrechen
+	app.Update(key("x")) // cancel
 	if app.mode != modeList {
 		t.Fatal("other key must cancel")
 	}
@@ -183,7 +183,7 @@ func TestReloadPicksUpExternalChanges(t *testing.T) {
 	if len(app.frames) != 0 {
 		t.Fatal("start empty")
 	}
-	// externe Änderung simulieren (z. B. watson-CLI parallel)
+	// simulate an external change (the watson CLI running alongside, say)
 	now := time.Now()
 	if _, err := store.Add(watson.Frame{
 		Start: now.Add(-time.Hour), Stop: now, Project: "extern", Tags: []string{},
@@ -206,7 +206,7 @@ func TestDeleteErrorShowsStatus(t *testing.T) {
 	if app.mode != modeList {
 		t.Fatal("must return to list even on error")
 	}
-	if !strings.Contains(app.errMsg, "Löschen fehlgeschlagen") {
+	if !strings.Contains(app.errMsg, "delete failed") {
 		t.Errorf("delete error must show in status bar, errMsg = %q", app.errMsg)
 	}
 }

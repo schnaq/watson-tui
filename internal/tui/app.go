@@ -76,12 +76,12 @@ func (a *App) Init() tea.Cmd {
 func (a *App) reload() {
 	frames, err := a.store.Frames()
 	if err != nil {
-		a.fatal(fmt.Sprintf("frames-Datei nicht lesbar: %v\nBackup: %s/frames.bak", err, a.store.Dir()))
+		a.fatal(fmt.Sprintf("cannot read the frames file: %v\nbackup: %s/frames.bak", err, a.store.Dir()))
 		return
 	}
 	state, err := a.store.State()
 	if err != nil {
-		a.fatal(fmt.Sprintf("state-Datei nicht lesbar: %v\nBackup: %s/state.bak", err, a.store.Dir()))
+		a.fatal(fmt.Sprintf("cannot read the state file: %v\nbackup: %s/state.bak", err, a.store.Dir()))
 		return
 	}
 	a.frames = frames
@@ -150,7 +150,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case modeConfirmCancel:
 			if s := msg.String(); s == "y" || s == "enter" {
 				if err := a.store.Cancel(); err != nil {
-					a.errMsg = "Verwerfen fehlgeschlagen: " + err.Error()
+					a.errMsg = "discard failed: " + err.Error()
 				}
 				a.reload()
 			}
@@ -159,7 +159,7 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case modeConfirmDelete:
 			if s := msg.String(); s == "y" || s == "enter" {
 				if err := a.store.Delete(a.pendingDelete.ID); err != nil {
-					a.errMsg = "Löschen fehlgeschlagen: " + err.Error()
+					a.errMsg = "delete failed: " + err.Error()
 				}
 				a.reload()
 			}
@@ -245,7 +245,7 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "s":
 		if a.state != nil {
 			if _, err := a.store.Stop(time.Now()); err != nil {
-				a.errMsg = "Stop fehlgeschlagen: " + err.Error()
+				a.errMsg = "stop failed: " + err.Error()
 			}
 			a.reload()
 		} else {
@@ -314,7 +314,7 @@ func (a *App) submitForm() (tea.Model, tea.Cmd) {
 	}
 	if !a.form.warned && overlaps(frame, a.frames, a.form.frameID) {
 		a.form.warned = true
-		a.form.errMsg = "Überlappt mit anderem Frame — enter speichert trotzdem"
+		a.form.errMsg = "overlaps another frame — enter saves anyway"
 		return a, nil
 	}
 	if a.form.editing {
@@ -324,7 +324,7 @@ func (a *App) submitForm() (tea.Model, tea.Cmd) {
 		_, err = a.store.Add(frame, now)
 	}
 	if err != nil {
-		a.form.errMsg = "Speichern fehlgeschlagen: " + err.Error()
+		a.form.errMsg = "save failed: " + err.Error()
 		return a, nil
 	}
 	a.reload()
@@ -350,11 +350,11 @@ func (a *App) updateStartTimer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		project := strings.TrimSpace(a.start.project.Value())
 		if project == "" {
-			a.start.errMsg = "Projekt fehlt"
+			a.start.errMsg = "project is missing"
 			return a, nil
 		}
 		if err := a.store.Start(project, splitTags(a.start.tags.Value()), time.Now()); err != nil {
-			a.start.errMsg = "Start fehlgeschlagen: " + err.Error()
+			a.start.errMsg = "starting the timer failed: " + err.Error()
 			return a, nil
 		}
 		a.reload()
@@ -374,7 +374,7 @@ func (a *App) updateStartTimer(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // stopping a timer is never more than one glance away.
 func (a *App) timerField() headerField {
 	if a.state == nil {
-		return headerField{value: styleDim.Render("kein Timer")}
+		return headerField{value: styleDim.Render("no timer")}
 	}
 	label := a.state.Project
 	if len(a.state.Tags) > 0 {
@@ -400,10 +400,10 @@ func (a *App) periodField(label string, p period) headerField {
 	}
 }
 
-// The header's "Summe" is a number the body underneath has to add up to, and
+// The header's "Total" is a number the body underneath has to add up to, and
 // whether a running timer belongs inside it is a property of the view, not of the
 // frames a caller happens to have at hand. So there are two functions, one per
-// case, and the ` + läuft` flag follows from which one is called:
+// case, and the ` + running` flag follows from which one is called:
 //
 //   - sumFieldWithoutRunning — the timer is outside the number, so it is flagged.
 //   - sumFieldWithRunning — the timer is inside the number, so there is no flag.
@@ -423,19 +423,19 @@ func (a *App) periodField(label string, p period) headerField {
 func (a *App) sumFieldWithoutRunning(frames []watson.Frame, p period) headerField {
 	value := formatDuration(sumInPeriod(frames, p, a.cfg.WeekStart))
 	if runningInPeriod(a.state, p, a.cfg.WeekStart) {
-		value += styleRunning.Render(" + läuft")
+		value += styleRunning.Render(" + running")
 	}
-	return headerField{label: "Summe", value: value}
+	return headerField{label: "Total", value: value}
 }
 
 // sumFieldWithRunning sums the given frames over p with the running timer counted
 // up to now, and carries no flag. The report uses it, and takes the number from
 // aggregate() — the report body's own arithmetic — so the header cannot drift
-// from the "Gesamt" it sits above: one function computes both. The body already
+// from the "Total" it sits above: one function computes both. The body already
 // says in words that the timer is counted.
 func (a *App) sumFieldWithRunning(frames []watson.Frame, p period) headerField {
 	_, grand := aggregate(withRunning(frames, a.state, a.now), p, a.cfg.WeekStart)
-	return headerField{label: "Summe", value: formatDuration(grand)}
+	return headerField{label: "Total", value: formatDuration(grand)}
 }
 
 // comparisonRow renders the neighbouring periods of p — the one before it and
@@ -444,12 +444,12 @@ func (a *App) sumFieldWithRunning(frames []watson.Frame, p period) headerField {
 // booked or nothing is known.
 //
 // The frames come from the caller and are not a.frames, because a neighbour is
-// only readable against the Summe beside it if both describe the same set. The
+// only readable against the Total beside it if both describe the same set. The
 // list passes its filtered frames — under an active filter the neighbours used to
 // sum every project, so "5h this week" for one project sat next to "8h last week"
 // for all of them, with nothing on screen marking the difference. The report
-// passes frames the running timer is already part of, so its "Monat" cannot come
-// out smaller than the "Summe" of the week that month contains.
+// passes frames the running timer is already part of, so its "Month" cannot come
+// out smaller than the "Total" of the week that month contains.
 func (a *App) comparisonRow(frames []watson.Frame, p period) []headerField {
 	cs := comparisonPeriods(p)
 	if len(cs) == 0 {
@@ -499,9 +499,9 @@ func (a *App) headerFields() [][]headerField {
 		// read against that sum.
 		shown := filterFrames(a.frames, a.list.filter)
 		return [][]headerField{
-			{a.periodField("Zeitraum", a.list.per), a.sumFieldWithoutRunning(shown, a.list.per)},
+			{a.periodField("Period", a.list.per), a.sumFieldWithoutRunning(shown, a.list.per)},
 			a.comparisonRow(shown, a.list.per),
-			{{"Filter", filter}, {"", fmt.Sprintf("%d Frames · %d Projekte", n, len(projects))}},
+			{{"Filter", filter}, {"", fmt.Sprintf("%d frames · %d projects", n, len(projects))}},
 			{{}, timer},
 		}
 	case modeReport:
@@ -513,7 +513,7 @@ func (a *App) headerFields() [][]headerField {
 		return [][]headerField{
 			{a.periodField("Report", a.report.per), a.sumFieldWithRunning(a.frames, a.report.per)},
 			a.comparisonRow(counted, a.report.per),
-			{{}, {"", fmt.Sprintf("%d Projekte", len(lines))}},
+			{{}, {"", fmt.Sprintf("%d projects", len(lines))}},
 			{{}, timer},
 		}
 	case modeOverview:
@@ -527,33 +527,33 @@ func (a *App) headerFields() [][]headerField {
 			grand = totals[len(totals)-1]
 		}
 		return [][]headerField{
-			{{"Übersicht", "Abrechnung"}, {"Summe gesamt", formatDuration(grand)}},
-			{{}, {"", fmt.Sprintf("%d Projekte", len(rows))}},
+			{{"Overview", "Billing"}, {"Total, all", formatDuration(grand)}},
+			{{}, {"", fmt.Sprintf("%d projects", len(rows))}},
 			{{}, timer},
 		}
 	case modeForm:
-		what := "neu"
+		what := "new"
 		if a.form.editing {
 			// ShortID instead of a slice: a foreign frames file may carry an ID
 			// shorter than 7 chars, and a panic in View() strands the alt-screen.
-			what = "bearbeiten (" + (watson.Frame{ID: a.form.frameID}).ShortID() + ")"
+			what = "editing (" + (watson.Frame{ID: a.form.frameID}).ShortID() + ")"
 		}
 		return [][]headerField{{{"Frame", what}}, {{}, timer}}
 	case modeStartTimer:
-		return [][]headerField{{{"Timer", "starten"}}, {{}, timer}}
+		return [][]headerField{{{"Timer", "starting"}}, {{}, timer}}
 	case modeConfirmDelete:
-		return [][]headerField{{{"Frame", "löschen"}}, {{}, timer}}
+		return [][]headerField{{{"Frame", "delete"}}, {{}, timer}}
 	case modeConfirmCancel:
-		return [][]headerField{{{"Timer", "verwerfen"}}, {{}, timer}}
+		return [][]headerField{{{"Timer", "discard"}}, {{}, timer}}
 	case modeHelp:
-		return [][]headerField{{{"Hilfe", "Tastenbelegung"}}, {{}, timer}}
+		return [][]headerField{{{"Help", "key map"}}, {{}, timer}}
 	default: // modeFatal
 		// The timer row belongs here too: fatal is reached from reload(), which
 		// returns before it overwrites a.state, so a timer that was running when
 		// the file went bad is still shown — and it is the one thing the user may
 		// want to act on before restarting.
 		return [][]headerField{
-			{{"Fehler", "watson-tui kann nicht weiterarbeiten"}}, {{}, timer},
+			{{"Error", "watson-tui cannot continue"}}, {{}, timer},
 		}
 	}
 }
@@ -578,11 +578,11 @@ func panelTitle(m mode) string {
 	case modeStartTimer:
 		return "Timer"
 	case modeConfirmDelete, modeConfirmCancel:
-		return "Bestätigen"
+		return "Confirm"
 	case modeHelp:
-		return "Hilfe"
+		return "Help"
 	case modeFatal:
-		return "Fehler"
+		return "Error"
 	default:
 		return "Frames"
 	}
@@ -624,10 +624,10 @@ func (a *App) View() string {
 	case modeStartTimer:
 		body = a.start.view()
 	case modeConfirmCancel:
-		body = "Laufenden Timer verwerfen?"
+		body = "Discard the running timer?"
 	case modeConfirmDelete:
 		f := a.pendingDelete
-		body = fmt.Sprintf("Frame löschen?\n\n  %s  %s–%s  %s",
+		body = fmt.Sprintf("Delete frame?\n\n  %s  %s–%s  %s",
 			f.Project,
 			f.Start.Local().Format("2006-01-02 15:04"),
 			f.Stop.Local().Format("15:04"),
@@ -727,14 +727,14 @@ func helpView() string {
 	// this screen was revisited for, and a terminal too short even for ten lines
 	// loses the tail, not the head. They also name the ‹ › the header draws around
 	// the period, so the affordance and its keys are explained in one place.
-	return `  j/k, ↓/↑     navigieren
-  ← →, [ ]     Zeitraum zurück/vor (‹ › im Kopf)
-  t/w/m/a      Tag/Woche/Monat/alles
-  enter        Frame editieren
-  n / d        neuer Frame · Frame löschen
-  s / S        Timer starten/stoppen · verwerfen
-  /            filtern
-  r / o        Report · Übersicht (Abrechnung)
-  R / ?        neu laden · diese Hilfe
-  q            beenden`
+	return `  j/k, ↓/↑     move
+  ← →, [ ]     previous/next period (‹ › in the header)
+  t/w/m/a      day/week/month/all
+  enter        edit frame
+  n / d        new frame · delete frame
+  s / S        start/stop timer · discard
+  /            filter
+  r / o        report · overview (billing)
+  R / ?        reload · this help
+  q            quit`
 }

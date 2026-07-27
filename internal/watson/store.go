@@ -13,8 +13,8 @@ import (
 )
 
 var (
-	ErrAlreadyRunning = errors.New("es läuft bereits ein Timer")
-	ErrNotRunning     = errors.New("kein Timer aktiv")
+	ErrAlreadyRunning = errors.New("a timer is already running")
+	ErrNotRunning     = errors.New("no timer is running")
 )
 
 // Store reads and writes a Watson data directory.

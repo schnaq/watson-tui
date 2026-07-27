@@ -365,8 +365,8 @@ func TestWithRunningNoState(t *testing.T) {
 func TestHeaderFieldsPerModeContext(t *testing.T) {
 	app := newTestApp(t)
 	app.Update(key("o"))
-	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Übersicht") {
-		t.Errorf("overview header = %q, want it to mention Übersicht", got)
+	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Overview") {
+		t.Errorf("overview header = %q, want it to mention Overview", got)
 	}
 	app.Update(key("esc"))
 	app.Update(key("r"))

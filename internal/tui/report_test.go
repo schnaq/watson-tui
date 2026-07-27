@@ -13,7 +13,7 @@ func TestAggregate(t *testing.T) {
 		mkFrame("a1111111111111111111111111111111", "alpha", day, 2*time.Hour, "code"),
 		mkFrame("b2222222222222222222222222222222", "alpha", day.Add(3*time.Hour), time.Hour, "review"),
 		mkFrame("c3333333333333333333333333333333", "beta", day.Add(5*time.Hour), 30*time.Minute),
-		// außerhalb des Zeitraums:
+		// outside the period:
 		mkFrame("d4444444444444444444444444444444", "alpha", day.AddDate(0, 0, 14), time.Hour),
 	}
 	lines, grand := aggregate(frames, period{unit: unitWeek, ref: day}, time.Monday)

@@ -72,7 +72,7 @@ func withLock(dir string, fn func() error) error {
 		// Timeout or cancellation means the lock is genuinely held by another
 		// process: refuse rather than run unlocked.
 		if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
-			return errors.New("watson-Verzeichnis ist von anderem Prozess gesperrt")
+			return errors.New("the watson directory is locked by another process")
 		}
 		// Any other error (e.g. a filesystem that does not support flock) is
 		// treated as best-effort: run without the lock.
@@ -81,7 +81,7 @@ func withLock(dir string, fn func() error) error {
 	if !ok {
 		// Defensive fallback: flock should return DeadlineExceeded on timeout,
 		// but guard against (false, nil) just in case.
-		return errors.New("watson-Verzeichnis ist von anderem Prozess gesperrt")
+		return errors.New("the watson directory is locked by another process")
 	}
 	defer func() { _ = fl.Unlock() }()
 	return fn()

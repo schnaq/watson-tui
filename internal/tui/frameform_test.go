@@ -95,7 +95,7 @@ func TestEditFlowChangesProject(t *testing.T) {
 	app := NewApp(store, "test")
 	app.Init()
 	app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	app.Update(key("a")) // Zeitraum "alles", unabhängig von Wochengrenzen
+	app.Update(key("a")) // period "all", independent of week boundaries
 	app.Update(key("enter"))
 	if app.mode != modeForm || !app.form.editing {
 		t.Fatal("enter must open the edit form")

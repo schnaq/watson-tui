@@ -2,6 +2,8 @@ package tui
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -11,11 +13,11 @@ import (
 // TestPanelFramesBodyAndTitle: the panel draws a border, carries its title in
 // the top line and never exceeds the width it was given.
 func TestPanelFramesBodyAndTitle(t *testing.T) {
-	out := panel("Frames", "erste Zeile\nzweite Zeile", 40, styleBorder)
+	out := panel("Frames", "first line\nsecond line", 40, styleBorder)
 	if !strings.Contains(out, "Frames") {
 		t.Errorf("panel lost its title:\n%s", out)
 	}
-	for _, want := range []string{"erste Zeile", "zweite Zeile"} {
+	for _, want := range []string{"first line", "second line"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("panel lost body line %q:\n%s", want, out)
 		}
@@ -34,7 +36,7 @@ func TestPanelFramesBodyAndTitle(t *testing.T) {
 // assert the exact width, not just an upper bound, across both parities.
 func TestPanelTruncatesLongTitle(t *testing.T) {
 	for _, width := range []int{30, 37, 40} {
-		out := panel(strings.Repeat("sehr langer titel ", 5), "body", width, styleBorder)
+		out := panel(strings.Repeat("a very long title ", 5), "body", width, styleBorder)
 		for i, line := range strings.Split(out, "\n") {
 			if w := lipgloss.Width(line); w != width {
 				t.Errorf("width %d: line %d is %d wide, want %d: %q",
@@ -80,7 +82,7 @@ func TestPanelKeepsAnsiBodyLinesIntact(t *testing.T) {
 func TestPanelClosesEveryLineAtTheSameColumn(t *testing.T) {
 	for _, border := range []lipgloss.Style{styleBorder, styleFocus, styleError} {
 		for _, title := range []string{"", "Frames"} {
-			out := panel(title, "eine Zeile\n", 40, border)
+			out := panel(title, "one line\n", 40, border)
 			for i, line := range strings.Split(out, "\n") {
 				if w := lipgloss.Width(line); w != 40 {
 					t.Errorf("title %q: line %d is %d wide, want 40: %q",
@@ -95,7 +97,7 @@ func TestPanelClosesEveryLineAtTheSameColumn(t *testing.T) {
 // draw wider than it is allowed to.
 func TestPanelStaysInsideNarrowWidths(t *testing.T) {
 	for width := 0; width <= 10; width++ {
-		out := panel("Frames", "erste Zeile\nzweite Zeile", width, styleFocus)
+		out := panel("Frames", "first line\nsecond line", width, styleFocus)
 		for i, line := range strings.Split(out, "\n") {
 			if w := lipgloss.Width(line); w > width {
 				t.Errorf("width %d: line %d is %d wide: %q", width, i, w, line)
@@ -106,28 +108,28 @@ func TestPanelStaysInsideNarrowWidths(t *testing.T) {
 
 // TestFooterShowsHintsOrError: the error replaces the hints, it does not append.
 func TestFooterShowsHintsOrError(t *testing.T) {
-	hints := renderFooter(80, [][]string{{"j/k bewegen"}}, "")
-	if !strings.Contains(hints, "j/k bewegen") {
+	hints := renderFooter(80, [][]string{{"j/k move"}}, "")
+	if !strings.Contains(hints, "j/k move") {
 		t.Errorf("footer lost its hints: %q", hints)
 	}
-	failed := renderFooter(80, [][]string{{"j/k bewegen"}}, "Speichern fehlgeschlagen")
-	if !strings.Contains(failed, "Speichern fehlgeschlagen") {
+	failed := renderFooter(80, [][]string{{"j/k move"}}, "save failed")
+	if !strings.Contains(failed, "save failed") {
 		t.Errorf("footer lost the error: %q", failed)
 	}
-	if strings.Contains(failed, "j/k bewegen") {
+	if strings.Contains(failed, "j/k move") {
 		t.Errorf("error must replace the hints, got %q", failed)
 	}
 }
 
 // TestFooterRendersOneLinePerGroup: two groups, two lines.
 func TestFooterRendersOneLinePerGroup(t *testing.T) {
-	groups := [][]string{{"j/k bewegen", "[ ] Zeitraum"}, {"? hilfe", "q ende"}}
+	groups := [][]string{{"j/k move", "[ ] period"}, {"? help", "q quit"}}
 	out := renderFooter(100, groups, "")
 	lines := strings.Split(out, "\n")
 	if len(lines) != 2 {
 		t.Fatalf("got %d lines, want 2: %q", len(lines), out)
 	}
-	if !strings.Contains(lines[0], "[ ] Zeitraum") || !strings.Contains(lines[1], "q ende") {
+	if !strings.Contains(lines[0], "[ ] period") || !strings.Contains(lines[1], "q quit") {
 		t.Errorf("groups landed on the wrong lines: %q", out)
 	}
 }
@@ -135,13 +137,13 @@ func TestFooterRendersOneLinePerGroup(t *testing.T) {
 // TestFooterMergesGroupsWhenOnlyOneLineFits: the period keys and the two exits
 // survive; that is the whole point of the change.
 func TestFooterMergesGroupsWhenOnlyOneLineFits(t *testing.T) {
-	groups := [][]string{{"j/k bewegen", "[ ] Zeitraum"}, {"? hilfe", "q ende", "n neu", "d löschen"}}
+	groups := [][]string{{"j/k move", "[ ] period"}, {"? help", "q quit", "n new", "d delete"}}
 	out := renderFooter(60, groups[:1], "") // caller passes what fits
 	if strings.Contains(out, "\n") {
 		t.Errorf("single group must be one line: %q", out)
 	}
 	merged := renderFooter(60, [][]string{mergeHints(groups)}, "")
-	for _, want := range []string{"[ ] Zeitraum", "? hilfe", "q ende"} {
+	for _, want := range []string{"[ ] period", "? help", "q quit"} {
 		if !strings.Contains(merged, want) {
 			t.Errorf("merged footer at 60 lost %q: %q", want, merged)
 		}
@@ -149,8 +151,8 @@ func TestFooterMergesGroupsWhenOnlyOneLineFits(t *testing.T) {
 }
 
 // TestMergedHintsKeepThePeriodAndTheExits: the merge is not reading order. The
-// navigation group ends in "t/w/m/a Tag/Woche/Monat/alles", 29 columns, and
-// poured in as it stands it pushes "? hilfe" and "q ende" off an 80-column line
+// navigation group ends in "t/w/m/a day/week/month/all", 26 columns, and
+// poured in as it stands it pushes "? help" and "q quit" off an 80-column line
 // — the two keys one cannot look up once they are gone. The real hints, at the
 // widths a short terminal actually has.
 func TestMergedHintsKeepThePeriodAndTheExits(t *testing.T) {
@@ -159,9 +161,9 @@ func TestMergedHintsKeepThePeriodAndTheExits(t *testing.T) {
 		width int
 		wants []string
 	}{
-		{60, []string{"← →", "? hilfe"}}, // 58 columns: q ende no longer fits
-		{80, []string{"← →", "? hilfe", "q ende"}},
-		{100, []string{"← →", "? hilfe", "q ende"}},
+		{60, []string{"← →", "? help"}}, // 58 columns: q quit no longer fits
+		{80, []string{"← →", "? help", "q quit"}},
+		{100, []string{"← →", "? help", "q quit"}},
 	} {
 		out := renderFooter(c.width, merged, "")
 		if strings.Contains(out, "\n") {
@@ -185,12 +187,12 @@ func TestMergedHintsKeepThePeriodAndTheExits(t *testing.T) {
 
 // TestFooterErrorStillReplacesEverything.
 func TestFooterErrorStillReplacesEverything(t *testing.T) {
-	groups := [][]string{{"j/k bewegen"}, {"q ende"}}
-	out := renderFooter(80, groups, "Speichern fehlgeschlagen")
-	if !strings.Contains(out, "Speichern fehlgeschlagen") {
+	groups := [][]string{{"j/k move"}, {"q quit"}}
+	out := renderFooter(80, groups, "save failed")
+	if !strings.Contains(out, "save failed") {
 		t.Errorf("error missing: %q", out)
 	}
-	if strings.Contains(out, "j/k") || strings.Contains(out, "q ende") {
+	if strings.Contains(out, "j/k") || strings.Contains(out, "q quit") {
 		t.Errorf("error must replace the hints: %q", out)
 	}
 	if strings.Contains(out, "\n") {
@@ -205,7 +207,7 @@ func TestFooterHintsListPeriodKeys(t *testing.T) {
 		t.Fatalf("list hints must come in two groups, got %d", len(groups))
 	}
 	flat := strings.Join(append(append([]string{}, groups[0]...), groups[1]...), " ")
-	for _, want := range []string{"← →", "t/w/m/a", "? hilfe", "q ende"} {
+	for _, want := range []string{"← →", "t/w/m/a", "? help", "q quit"} {
 		if !strings.Contains(flat, want) {
 			t.Errorf("list hints missing %q: %q", want, flat)
 		}
@@ -225,7 +227,7 @@ func TestFooterKeepsPeriodAndExitsAt80(t *testing.T) {
 		t.Errorf("period hint gone at 80 columns: %q", first)
 	}
 	second := renderFooter(80, groups[1:], "")
-	for _, want := range []string{"? hilfe", "q ende"} {
+	for _, want := range []string{"? help", "q quit"} {
 		if !strings.Contains(second, want) {
 			t.Errorf("exit hint %q gone at 80 columns: %q", want, second)
 		}
@@ -298,10 +300,10 @@ func TestFooterHintsPerMode(t *testing.T) {
 		modeReport:        {"t/w/m", "esc"},
 		modeOverview:      {"esc"},
 		modeStartTimer:    {"enter", "esc"},
-		modeConfirmDelete: {"y", "abbrechen"},
-		modeConfirmCancel: {"y", "abbrechen"},
-		modeHelp:          {"Taste"},
-		modeFatal:         {"beendet"},
+		modeConfirmDelete: {"y delete", "cancels"},
+		modeConfirmCancel: {"y discard", "cancels"},
+		modeHelp:          {"closes the help"},
+		modeFatal:         {"quits watson-tui"},
 	}
 	for m, wants := range cases {
 		var flat []string
@@ -400,7 +402,7 @@ func TestSpreadFillsTheLineAndKeepsBothFields(t *testing.T) {
 	// them, and a single field must still stay inside the width.
 	for width := 0; width < 3; width++ {
 		for _, out := range []string{
-			spread(left, "rechts", width), spread("", "rechts", width), spread(left, "", width),
+			spread(left, "right", width), spread("", "right", width), spread(left, "", width),
 		} {
 			if w := lipgloss.Width(out); w > width {
 				t.Errorf("width %d: line is %d wide: %q", width, w, out)
@@ -414,14 +416,14 @@ func TestSpreadFillsTheLineAndKeepsBothFields(t *testing.T) {
 // lines are the six the chrome budgets for it from height 24 up.
 func TestHeaderShowsFieldsFramed(t *testing.T) {
 	rows := [][]headerField{
-		{{"Zeitraum", "Woche 20.07.–26.07."}, {"Summe", "12h 30m"}},
-		{{"Vorwoche", "8h 00m"}, {"Monat", "40h 15m"}},
-		{{"Filter", "—"}, {"", "3 Frames · 2 Projekte"}},
+		{{"Period", "Week 2026-07-20 – 2026-07-26"}, {"Total", "12h 30m"}},
+		{{"Prev week", "8h 00m"}, {"Month", "40h 15m"}},
+		{{"Filter", "—"}, {"", "3 frames · 2 projects"}},
 		{{}, {"", "▶ schnaq 1:23:45"}},
 	}
 	out := renderHeader(100, 24, "0.1.0", rows)
-	for _, want := range []string{"watson-tui", "0.1.0", "Zeitraum", "Woche 20.07.–26.07.",
-		"Summe", "12h 30m", "Vorwoche", "Filter", "▶ schnaq 1:23:45"} {
+	for _, want := range []string{"watson-tui", "0.1.0", "Period", "Week 2026-07-20 – 2026-07-26",
+		"Total", "12h 30m", "Prev week", "Filter", "▶ schnaq 1:23:45"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("framed header missing %q:\n%s", want, out)
 		}
@@ -446,7 +448,7 @@ func TestHeaderFillsItsRowBudget(t *testing.T) {
 		for _, n := range []int{1, 2, 3, 4, 5, 6} {
 			rows := make([][]headerField, n)
 			for i := range rows {
-				rows[i] = []headerField{{"Feld", fmt.Sprintf("wert %d", i)}}
+				rows[i] = []headerField{{"Field", fmt.Sprintf("value %d", i)}}
 			}
 			rows[n-1] = []headerField{{}, {"", timer}}
 
@@ -473,14 +475,14 @@ func TestHeaderFillsItsRowBudget(t *testing.T) {
 // values but drops the frame.
 func TestHeaderCollapsesToOneLine(t *testing.T) {
 	rows := [][]headerField{
-		{{"Zeitraum", "Woche 20.07."}, {"Frames", "12"}},
-		{{"Filter", "—"}, {"", "kein Timer"}},
+		{{"Period", "Week 2026-07-20"}, {"Frames", "12"}},
+		{{"Filter", "—"}, {"", "no timer"}},
 	}
 	out := renderHeader(100, 15, "0.1.0", rows)
 	if lines := strings.Count(out, "\n") + 1; lines != 1 {
 		t.Errorf("collapsed header has %d lines, want 1: %q", lines, out)
 	}
-	if !strings.Contains(out, "Woche 20.07.") || !strings.Contains(out, "kein Timer") {
+	if !strings.Contains(out, "Week 2026-07-20") || !strings.Contains(out, "no timer") {
 		t.Errorf("collapsed header lost context: %q", out)
 	}
 	if strings.Contains(out, "╭") {
@@ -490,7 +492,7 @@ func TestHeaderCollapsesToOneLine(t *testing.T) {
 
 // TestHeaderVanishesOnTinyTerminals: below 12 lines every row belongs to the body.
 func TestHeaderVanishesOnTinyTerminals(t *testing.T) {
-	rows := [][]headerField{{{"Zeitraum", "Woche"}, {"Frames", "1"}}}
+	rows := [][]headerField{{{"Period", "Week"}, {"Frames", "1"}}}
 	if out := renderHeader(100, 10, "0.1.0", rows); out != "" {
 		t.Errorf("header must be empty at height 10, got %q", out)
 	}
@@ -499,8 +501,8 @@ func TestHeaderVanishesOnTinyTerminals(t *testing.T) {
 // TestHeaderRespectsWidth: no rendered line may exceed the terminal width.
 func TestHeaderRespectsWidth(t *testing.T) {
 	rows := [][]headerField{
-		{{"Zeitraum", strings.Repeat("lang ", 30)}, {"Frames", "999"}},
-		{{"Filter", strings.Repeat("filter ", 20)}, {"", "▶ projekt 1:23:45"}},
+		{{"Period", strings.Repeat("long ", 30)}, {"Frames", "999"}},
+		{{"Filter", strings.Repeat("filter ", 20)}, {"", "▶ project 1:23:45"}},
 	}
 	for _, width := range []int{40, 80, 100} {
 		for _, height := range []int{30, 15} {
@@ -524,7 +526,7 @@ func TestHeaderRespectsWidth(t *testing.T) {
 func TestHeaderCutsBetweenAnsiSequences(t *testing.T) {
 	// Display width 60, but 69 runes, so it has to be cut at width 40 either way.
 	long := "\x1b[31m" + strings.Repeat("a", 60) + "\x1b[0m"
-	rows := [][]headerField{{{"Zeitraum", long}, {"Frames", "999"}}}
+	rows := [][]headerField{{{"Period", long}, {"Frames", "999"}}}
 	for _, height := range []int{30, 15} {
 		out := renderHeader(40, height, "0.1.0", rows)
 		for i, line := range strings.Split(out, "\n") {
@@ -547,7 +549,7 @@ func TestHeaderCutsBetweenAnsiSequences(t *testing.T) {
 // two-column line lands on a one-column terminal.
 func TestHeaderStaysInsideNarrowWidths(t *testing.T) {
 	rows := [][]headerField{
-		{{"Zeitraum", "Woche 20.07."}, {"Frames", "12"}},
+		{{"Period", "Week 2026-07-20"}, {"Frames", "12"}},
 		{{"Filter", "—"}, {"", "▶ schnaq 1:23:45"}},
 	}
 	for width := 0; width <= 10; width++ {
@@ -587,18 +589,18 @@ func TestSpreadKeepsTheRightFieldRight(t *testing.T) {
 	}
 }
 
-// TestFooterShedsWholeHints: the list hints are 58 and 116 columns, so on any
+// TestFooterShedsWholeHints: the list hints are 50 and 103 columns, so on any
 // normal terminal some have to go. They go from the tail and they go whole — a
-// footer ending in "q en" or a dangling separator is worse than one hint fewer.
+// footer ending in "q qu" or a dangling separator is worse than one hint fewer.
 //
-// Both numbers are asserted, not just recited. shedHints's doc quotes the 116
-// as the reason it exists, and that figure had already gone stale once — it
-// said 116 while the hints measured 109, and only came true again when the
-// English two were said in German. A number a comment leans on is worth a line
-// of test; when this fails, fix the two comments rather than the number.
+// Both numbers are asserted, not just recited. shedHints's doc quotes the 103
+// as the reason it exists, and that figure has gone stale twice already — it
+// said 116 while the hints measured 109, and it still said 116 while the
+// English sweep brought them down to 103. A number a comment leans on is worth
+// a line of test; when this fails, fix the two comments rather than the number.
 func TestFooterShedsWholeHints(t *testing.T) {
 	groups := footerHints(modeList)
-	for i, want := range []int{58, 116} {
+	for i, want := range []int{50, 103} {
 		if got := lipgloss.Width(strings.Join(groups[i], hintSep)); got != want {
 			t.Errorf("list hint group %d is %d columns, the comments here and on "+
 				"shedHints say %d", i, got, want)
@@ -643,7 +645,7 @@ func TestFooterShedsWholeHints(t *testing.T) {
 func TestFooterKeepsHelpAndQuitAt80(t *testing.T) {
 	for _, width := range []int{80, 100, 120} {
 		out := renderFooter(width, footerHints(modeList), "")
-		for _, want := range []string{"? hilfe", "q ende"} {
+		for _, want := range []string{"? help", "q quit"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("width %d: footer lost %q: %q", width, want, out)
 			}
@@ -652,8 +654,9 @@ func TestFooterKeepsHelpAndQuitAt80(t *testing.T) {
 }
 
 // TestStyleHintAccentsOnlyRealKeys: the accent on a hint's first word is a
-// promise that the word is a key one can press. "andere Taste abbrechen" and
-// "beliebige Taste …" name a class of keys, not one, so they are dimmed whole.
+// promise that the word is a key one can press. "any other key cancels" and
+// "any key closes the help" name a class of keys, not one, so they are dimmed
+// whole.
 //
 // The colour profile has to be forced: under go test the renderer strips
 // colour, both styles render to the bare string, and every assertion here would
@@ -671,14 +674,14 @@ func TestStyleHintAccentsOnlyRealKeys(t *testing.T) {
 	accented := func(h, word string) bool {
 		return strings.Contains(h, styleKey.Render(word))
 	}
-	for _, h := range []string{"j/k bewegen", "enter bearbeiten", "q ende"} {
+	for _, h := range []string{"j/k move", "enter edit", "q quit"} {
 		word := strings.SplitN(h, " ", 2)[0]
 		if !accented(styleHint(h), word) {
 			t.Errorf("%q: the key %q must carry the accent: %q", h, word, styleHint(h))
 		}
 	}
-	for _, h := range []string{"andere Taste abbrechen", "beliebige Taste schließt die Hilfe",
-		"beliebige Taste beendet watson-tui"} {
+	for _, h := range []string{"any other key cancels", "any key closes the help",
+		"any key quits watson-tui"} {
 		word := strings.SplitN(h, " ", 2)[0]
 		if accented(styleHint(h), word) {
 			t.Errorf("%q: %q is no key and must not be offered as one: %q", h, word, styleHint(h))
@@ -712,30 +715,33 @@ func TestStyleHintAccentsOnlyRealKeys(t *testing.T) {
 	}
 }
 
-// TestFooterHintsAreGerman: the UI speaks German, the identifiers English.
-// "enter edit" and "/ filter" stood here once and contradicted the help screen,
-// which teaches the same two keys as "Frame editieren" and "filtern".
+// TestFooterHintsAreEnglish: the footer has to teach the same keys as the help
+// screen, in the same words. It used to be the German half of that promise —
+// "enter edit" and "/ filter" stood here once while the help said "Frame
+// editieren" and "filtern" — and the sweep turned it around rather than
+// retiring it: it still pins the footer against the help, and it still pins
+// both directions.
 //
 // Whole hint strings, not substrings: "/ filtern" contains "filter", so a
 // Contains check would pass on the very string it is supposed to reject. And
-// presence alone does not pin anything — a refactor that adds the English
-// spelling back beside the German one has to fail too, so the English ones are
+// presence alone does not pin anything — a refactor that adds the German
+// spelling back beside the English one has to fail too, so the German ones are
 // asserted absent.
-func TestFooterHintsAreGerman(t *testing.T) {
+func TestFooterHintsAreEnglish(t *testing.T) {
 	have := map[string]bool{}
 	for _, g := range footerHints(modeList) {
 		for _, h := range g {
 			have[h] = true
 		}
 	}
-	for _, want := range []string{"enter bearbeiten", "/ filtern"} {
+	for _, want := range []string{"enter edit", "/ filter"} {
 		if !have[want] {
-			t.Errorf("list hints lost the German hint %q: %v", want, footerHints(modeList))
+			t.Errorf("list hints lost the English hint %q: %v", want, footerHints(modeList))
 		}
 	}
-	for _, unwanted := range []string{"enter edit", "/ filter"} {
+	for _, unwanted := range []string{"enter bearbeiten", "/ filtern"} {
 		if have[unwanted] {
-			t.Errorf("list hints went back to English with %q: %v", unwanted, footerHints(modeList))
+			t.Errorf("list hints went back to German with %q: %v", unwanted, footerHints(modeList))
 		}
 	}
 }
@@ -796,5 +802,73 @@ func TestHelpTeachesThePeriodKeysFirst(t *testing.T) {
 	if !strings.Contains(helpView(), "‹ ›") {
 		t.Errorf("the help must explain the ‹ › periodField draws around the period:\n%s",
 			helpView())
+	}
+}
+
+// germanLeftovers are the words a leftover German UI string is spelled with.
+// The comments in this codebase are English, so a German word inside a string
+// literal is a leftover from the sweep and not prose.
+//
+// Every entry is bounded as tightly as it has to be, because the scan reads the
+// whole code half of a line and not the literals inside it. Bare "oder" fires on
+// border.Render, bare "Tag" on strings.Join(a.state.Tags, ", "); " oder ",
+// "Tag " and "Tag," do not. The list is wide rather than short on purpose: the
+// first version had "Projekte" but no "Projekt", no "Tag" and no "oder", and
+// walked straight past the filter placeholder "Projekt, Tag oder ID" — the one
+// German string the plan had missed. Add the words, not the exceptions.
+var germanLeftovers = []string{
+	" oder ", "Abrechnung", "Bestätigen", "Datei", "Fehler", "Feld", "Gesamt",
+	"Hilfe", "Monat", "Projekt", "Summe", "Tag ", "Tag,", "Taste", "Woche",
+	"Zeitraum", "Übersicht", "abbrechen", "bearbeiten", "beenden", "bewegen",
+	"fehlgeschlagen", "gesperrt", "kein ", "keine ", "laufend", "läuft",
+	"löschen", "neuer", "schmal", "speichern", "starten", "ungültig",
+	"verwerfen", "zurück",
+}
+
+// TestNoGermanLeftInTheInterface guards the sweep. It reads every production
+// file of the binary — both packages and main — and fails on a German word or a
+// bare umlaut inside a string literal.
+//
+// The umlaut half is the cheap net that catches what the word list does not
+// think of: no English string this UI draws contains one, while a German one
+// almost always does. Between them the two halves cost one test and cover the
+// whole vocabulary.
+//
+// strings.Cut at "//" leaves the comments alone. It also cuts at a "//" inside a
+// literal, which costs nothing here because no UI text holds two slashes — the
+// key hints spell their alternatives "j/k" and "t/w/m/a".
+func TestNoGermanLeftInTheInterface(t *testing.T) {
+	const umlauts = "äöüÄÖÜß"
+	for _, dir := range []string{".", "../watson", "../../cmd/watson-tui"} {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, e := range entries {
+			name := e.Name()
+			if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+				continue
+			}
+			src, err := os.ReadFile(filepath.Join(dir, name))
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, line := range strings.Split(string(src), "\n") {
+				code, _, _ := strings.Cut(line, "//")
+				if !strings.Contains(code, `"`) && !strings.Contains(code, "`") {
+					continue
+				}
+				for _, w := range germanLeftovers {
+					if strings.Contains(code, w) {
+						t.Errorf("%s: German %q left in a string: %s",
+							filepath.Join(dir, name), w, strings.TrimSpace(line))
+					}
+				}
+				if i := strings.IndexAny(code, umlauts); i >= 0 {
+					t.Errorf("%s: umlaut %q left in a string: %s",
+						filepath.Join(dir, name), code[i:i+2], strings.TrimSpace(line))
+				}
+			}
+		}
 	}
 }

@@ -9,7 +9,7 @@ import (
 )
 
 func TestOverviewColumns(t *testing.T) {
-	// Mittwoch 2026-07-22, Wochenstart Montag
+	// Wednesday 2026-07-22, week starting on Monday
 	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
 	cols := overviewColumns(now, time.Monday)
 	if len(cols) != 5 {
@@ -85,7 +85,7 @@ func TestOverviewKeyFlow(t *testing.T) {
 	if app.mode != modeOverview {
 		t.Fatal("o must open overview")
 	}
-	if !strings.Contains(app.View(), "Übersicht") {
+	if !strings.Contains(app.View(), "Overview") {
 		t.Error("overview view missing title")
 	}
 	app.Update(key("esc"))

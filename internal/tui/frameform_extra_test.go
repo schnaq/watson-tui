@@ -119,7 +119,7 @@ func TestEditRoundTripKeepsSeconds(t *testing.T) {
 	app := NewApp(store, "test")
 	app.Init()
 	app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	app.Update(key("a")) // Zeitraum "alles"
+	app.Update(key("a")) // period "all"
 	app.Update(key("enter"))
 	if app.mode != modeForm || !app.form.editing {
 		t.Fatal("enter must open the edit form")
@@ -152,10 +152,10 @@ func TestFormViewShortFrameID(t *testing.T) {
 	app := newTestApp(t)
 	app.form = newFormModel(&existing, nil, now)
 	app.mode = modeForm
-	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "bearbeiten (abc)") {
+	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "editing (abc)") {
 		t.Errorf("short id must render verbatim: %q", got)
 	}
-	if out := app.View(); !strings.Contains(out, "bearbeiten (abc)") {
+	if out := app.View(); !strings.Contains(out, "editing (abc)") {
 		t.Errorf("assembled view lost the frame it edits:\n%s", out)
 	}
 }
@@ -184,9 +184,9 @@ func TestOverlapWarningResetsOnEdit(t *testing.T) {
 		t.Fatal("first submit must warn about overlap")
 	}
 	for i := 0; i < 3; i++ {
-		app.Update(key("tab")) // Projekt → Tags
+		app.Update(key("tab")) // project → tags
 	}
-	app.Update(key("x")) // Feld geändert
+	app.Update(key("x")) // field changed
 	if app.form.warned || app.form.errMsg != "" {
 		t.Errorf("changed field must re-arm the check, warned=%v errMsg=%q", app.form.warned, app.form.errMsg)
 	}
@@ -208,14 +208,14 @@ func TestFormView(t *testing.T) {
 	app := newTestApp(t)
 	app.form = newFormModel(nil, nil, time.Now())
 	app.mode = modeForm
-	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Frame neu") {
+	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Frame new") {
 		t.Errorf("header must name the new frame: %q", got)
 	}
-	if got := renderFooter(100, footerHints(modeForm), ""); !strings.Contains(got, "esc abbrechen") {
+	if got := renderFooter(100, footerHints(modeForm), ""); !strings.Contains(got, "esc cancel") {
 		t.Errorf("footer must carry the abort key: %q", got)
 	}
 	out := app.form.view()
-	if strings.Contains(out, "Neuer Frame") || strings.Contains(out, "esc:") {
+	if strings.Contains(out, "Frame new") || strings.Contains(out, "esc:") {
 		t.Errorf("body must not repeat the chrome's title or hints:\n%s", out)
 	}
 
@@ -225,7 +225,7 @@ func TestFormView(t *testing.T) {
 	}
 	app.form = newFormModel(&existing, nil, time.Now())
 	app.form.errMsg = "kaputt"
-	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Frame bearbeiten (abcdef0") {
+	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Frame editing (abcdef0") {
 		t.Errorf("header must name the edited frame: %q", got)
 	}
 	if out := app.form.view(); !strings.Contains(out, "kaputt") {

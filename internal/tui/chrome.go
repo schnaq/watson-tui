@@ -84,11 +84,11 @@ func renderFooter(width int, groups [][]string, errMsg string) string {
 const hintSep = " · "
 
 // shedHints joins the hints that fit avail columns and drops the rest from the
-// tail. Whole hints only: the list mode's second group alone needs 116 columns,
-// so on any normal terminal something has to go, and a footer ending in "q en"
+// tail. Whole hints only: the list mode's second group alone needs 103 columns,
+// so on any normal terminal something has to go, and a footer ending in "q qu"
 // reads as a key that does not exist. Callers order their hints by how badly the
 // user needs them, so what goes is what the help screen can still teach.
-// TestFooterShedsWholeHints asserts the 116 instead of leaving it to rot here.
+// TestFooterShedsWholeHints asserts the 103 instead of leaving it to rot here.
 //
 // Every hint is measured plain and styled only once it is kept. lipgloss.Width
 // does step over escape sequences, so that order is not what makes the
@@ -116,19 +116,20 @@ func shedHints(hints []string, avail int) string {
 }
 
 // keylessLead are the words a hint that names no single key begins with.
-// "andere Taste abbrechen" and "beliebige Taste schließt die Hilfe" describe a
-// class of keys, and the accent styleHint puts on a first word offers "andere"
-// and "beliebige" as keys one could press.
+// "any other key cancels" and "any key closes the help" describe a class of
+// keys, and the accent styleHint puts on a first word offers "any" as a key one
+// could press.
 //
 // A deny-list of lead words rather than an allow-list of keys, because the two
 // fail in opposite directions: a new hint whose key is missing from an
 // allow-list loses its accent and the key stops standing out, while a new
 // keyless phrase missing from this list merely gets one accent too many — and
-// no key in this UI is spelled like a German adjective, so the list stays short.
-var keylessLead = map[string]bool{"andere": true, "beliebige": true}
+// no key in this UI is spelled like an English determiner, so the list stays
+// short.
+var keylessLead = map[string]bool{"any": true}
 
 // styleHint sets the key off from what it does: "j/k" in the accent colour,
-// "bewegen" dimmed. Two shades in a line of ten hints are what let the eye find
+// "move" dimmed. Two shades in a line of ten hints are what let the eye find
 // the key it is looking for instead of reading the line. A hint that names no
 // key is dimmed whole — see keylessLead.
 func styleHint(h string) string {
@@ -143,16 +144,16 @@ func styleHint(h string) string {
 
 // mergeHints pours the groups into a single line, for a terminal too short to
 // give each of them one. Not in reading order: the first group ends in
-// "t/w/m/a Tag/Woche/Monat/alles", twenty-nine columns, and poured in as it
-// stands it pushes "? hilfe" and "q ende" off an 80-column line — the two keys
-// nobody can look up once they are gone. So the first group keeps its two
-// leading hints ahead of the rest and its tail goes last. Nothing is dropped
-// here; shedHints decides what fits.
+// "t/w/m/a day/week/month/all", twenty-six columns, and poured in as it stands
+// it pushes "? help" and "q quit" off an 80-column line — the two keys nobody
+// can look up once they are gone. So the first group keeps its two leading
+// hints ahead of the rest and its tail goes last. Nothing is dropped here;
+// shedHints decides what fits.
 func mergeHints(groups [][]string) []string {
 	if len(groups) == 0 {
 		return nil
 	}
-	const lead = 2 // "j/k bewegen" and "← → Zeitraum"
+	const lead = 2 // "j/k move" and "← → period"
 	head, tail := groups[0], []string(nil)
 	if len(head) > lead {
 		head, tail = head[:lead], head[lead:]
@@ -170,37 +171,38 @@ func mergeHints(groups [][]string) []string {
 func footerHints(m mode) [][]string {
 	switch m {
 	case modeForm:
-		return [][]string{{"tab Feld", "→ Vorschlag", "enter speichern", "esc abbrechen"}}
+		return [][]string{{"tab field", "→ suggestion", "enter save", "esc cancel"}}
 	case modeReport:
-		return [][]string{{"t/w/m Zeitraum", "[ ] verschieben", "esc zurück"}}
+		return [][]string{{"t/w/m period", "[ ] shift", "esc back"}}
 	case modeOverview:
-		return [][]string{{"esc zurück"}}
+		return [][]string{{"esc back"}}
 	case modeStartTimer:
-		return [][]string{{"tab Feld", "→ Vorschlag", "enter starten", "esc abbrechen"}}
+		return [][]string{{"tab field", "→ suggestion", "enter start", "esc cancel"}}
 	case modeConfirmDelete:
-		return [][]string{{"y löschen", "andere Taste abbrechen"}}
+		return [][]string{{"y delete", "any other key cancels"}}
 	case modeConfirmCancel:
-		return [][]string{{"y verwerfen", "andere Taste abbrechen"}}
+		return [][]string{{"y discard", "any other key cancels"}}
 	case modeHelp:
-		return [][]string{{"beliebige Taste schließt die Hilfe"}}
+		return [][]string{{"any key closes the help"}}
 	case modeFatal:
-		return [][]string{{"beliebige Taste beendet watson-tui"}}
+		return [][]string{{"any key quits watson-tui"}}
 	default:
 		// Navigation and period on the first line, actions and views on the
-		// second. "← → Zeitraum" and "t/w/m/a" are why this change exists: the
+		// second. "← → period" and "t/w/m/a" are why this change exists: the
 		// period read as a state because no hint ever said it could be moved.
 		//
-		// "? hilfe" and "q ende" sit second and third in the second group on
-		// purpose. About six hints of it survive at 80 columns, and these two
-		// are the ones there is no way left to look up once they are gone. They
-		// used to sit third and fourth, behind "n neu"; "enter bearbeiten" is six
-		// columns wider than the "enter edit" that stood here in English, and at
-		// the 60 columns the merged single line has to work at, that width came
-		// out of "? hilfe". Moving it up one slot is what buys it back.
+		// "? help" and "q quit" sit third and fourth in the second group on
+		// purpose. About seven hints of it survive at 80 columns, and these two
+		// are the ones there is no way left to look up once they are gone. In
+		// German they had to move up one slot, behind "enter bearbeiten" alone:
+		// that hint was six columns wider than "enter edit", and at the 60
+		// columns the merged single line has to work at, the difference came out
+		// of "? hilfe". English pays those columns back, so the two sit behind
+		// "n new" again.
 		return [][]string{
-			{"j/k bewegen", "← → Zeitraum", "t/w/m/a Tag/Woche/Monat/alles"},
-			{"enter bearbeiten", "? hilfe", "q ende", "n neu", "d löschen", "s timer",
-				"/ filtern", "r report", "o übersicht", "R neu laden"},
+			{"j/k move", "← → period", "t/w/m/a day/week/month/all"},
+			{"enter edit", "n new", "? help", "q quit", "d delete", "s timer",
+				"/ filter", "r report", "o overview", "R reload"},
 		}
 	}
 }
