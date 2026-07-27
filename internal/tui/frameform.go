@@ -39,7 +39,7 @@ func parseDateTime(s string, now time.Time) (time.Time, error) {
 	if t, err := time.ParseInLocation("15:04", s, loc); err == nil {
 		return time.Date(now.Year(), now.Month(), now.Day(), t.Hour(), t.Minute(), 0, 0, loc), nil
 	}
-	return time.Time{}, fmt.Errorf("ungültige Zeit %q (YYYY-MM-DD HH:MM oder HH:MM)", s)
+	return time.Time{}, fmt.Errorf("invalid time %q (YYYY-MM-DD HH:MM or HH:MM)", s)
 }
 
 // splitTags parses a comma separated tag list.
@@ -58,7 +58,7 @@ func splitTags(s string) []string {
 func buildFrame(project, startStr, stopStr, tagsStr string, now time.Time) (watson.Frame, error) {
 	project = strings.TrimSpace(project)
 	if project == "" {
-		return watson.Frame{}, errors.New("Projekt fehlt")
+		return watson.Frame{}, errors.New("project is missing")
 	}
 	start, err := parseDateTime(startStr, now)
 	if err != nil {
@@ -69,7 +69,7 @@ func buildFrame(project, startStr, stopStr, tagsStr string, now time.Time) (wats
 		return watson.Frame{}, err
 	}
 	if !stop.After(start) {
-		return watson.Frame{}, errors.New("Stop muss nach Start liegen")
+		return watson.Frame{}, errors.New("stop must be after start")
 	}
 	return watson.Frame{Start: start.UTC(), Stop: stop.UTC(), Project: project, Tags: splitTags(tagsStr)}, nil
 }
@@ -121,7 +121,7 @@ type formModel struct {
 // newFormModel builds the form; existing == nil means "new frame".
 func newFormModel(existing *watson.Frame, frames []watson.Frame, now time.Time) formModel {
 	var m formModel
-	placeholders := [fieldCount]string{"Projekt", "YYYY-MM-DD HH:MM", "YYYY-MM-DD HH:MM", "tag1, tag2"}
+	placeholders := [fieldCount]string{"Project", "YYYY-MM-DD HH:MM", "YYYY-MM-DD HH:MM", "tag1, tag2"}
 	for i := range m.inputs {
 		ti := textinput.New()
 		ti.Prompt = ""
@@ -161,7 +161,7 @@ func (m *formModel) setFocus(i int) {
 }
 
 func (m formModel) view() string {
-	labels := [fieldCount]string{"Projekt", "Start  ", "Stop   ", "Tags   "}
+	labels := [fieldCount]string{"Project", "Start  ", "Stop   ", "Tags   "}
 	var b strings.Builder
 	for i := range m.inputs {
 		cursor := "  "

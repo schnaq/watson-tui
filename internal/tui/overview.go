@@ -18,16 +18,23 @@ type overviewColumn struct {
 }
 
 // overviewColumns defines the fixed billing columns:
-// diese Woche, letzte Woche, dieser Monat, letzter Monat, gesamt.
+// this week, last week, this month, last month, all.
+//
+// Each short form is shorter than its title, which is what makes the fallback in
+// columnHeader mean anything. Two of them are unreachable in practice: "this
+// week" and "last week" are nine runes, exactly overviewCellMin, so the full
+// title fits at every width the table survives at and "week"/"prev wk" never
+// come up. That is the right way round — a full title that fits beats a short
+// one — but it leaves the month columns as the only ones that shorten.
 func overviewColumns(now time.Time, weekStart time.Weekday) []overviewColumn {
 	week := period{unit: unitWeek, ref: now}
 	month := period{unit: unitMonth, ref: now}
 	return []overviewColumn{
-		{"diese Woche", "Woche", week},
-		{"letzte Woche", "Vorwoche", week.shift(weekStart, -1)},
-		{"dieser Monat", "Monat", month},
-		{"letzter Monat", "Vormonat", month.shift(weekStart, -1)},
-		{"gesamt", "gesamt", period{unit: unitAll, ref: now}},
+		{"this week", "week", week},
+		{"last week", "prev wk", week.shift(weekStart, -1)},
+		{"this month", "month", month},
+		{"last month", "prev mo", month.shift(weekStart, -1)},
+		{"all", "all", period{unit: unitAll, ref: now}},
 	}
 }
 
@@ -38,7 +45,7 @@ type overviewRow struct {
 }
 
 // buildOverview sums frame durations per project per column. Rows sort by
-// the last column (gesamt) descending, ties alphabetically. The second
+// the last column (all) descending, ties alphabetically. The second
 // return value holds the per-column totals.
 func buildOverview(frames []watson.Frame, cols []overviewColumn, weekStart time.Weekday) ([]overviewRow, []time.Duration) {
 	sums := map[string][]time.Duration{}
@@ -123,9 +130,9 @@ func overviewLayout(width, n int) (projW, cellW int) {
 }
 
 // overviewDropOrder lists the value columns in the order they are given up on a
-// narrow terminal: least useful for writing an invoice first. gesamt is not in
+// narrow terminal: least useful for writing an invoice first. all is not in
 // the list, so it is the column that always survives.
-var overviewDropOrder = []int{1, 3, 2, 0} // letzte Woche, letzter Monat, dieser Monat, diese Woche
+var overviewDropOrder = []int{1, 3, 2, 0} // last week, last month, this month, this week
 
 // overviewFit decides which value columns the table shows and how wide its
 // columns are. A column that no longer fits its minimum is dropped whole
@@ -171,7 +178,7 @@ func droppedNote(cols []overviewColumn, dropped []int) string {
 	for _, i := range dropped {
 		names = append(names, cols[i].title)
 	}
-	return "zu schmal für: " + strings.Join(names, ", ")
+	return "too narrow for: " + strings.Join(names, ", ")
 }
 
 // columnHeader picks the longest header variant that fits cellW.
@@ -185,10 +192,10 @@ func columnHeader(c overviewColumn, cellW int) string {
 
 // runningNote describes the running timer below the table: how long it runs
 // and which columns count it. Naming the columns matters for billing — a timer
-// started before this week's boundary counts into letzte Woche, while the
-// diese Woche column an invoice is written from does not see it at all.
+// started before this week's boundary counts into last week, while the
+// this week column an invoice is written from does not see it at all.
 func runningNote(state *watson.State, cols []overviewColumn, weekStart time.Weekday, now time.Time, projW int) string {
-	note := fmt.Sprintf("▶ %s läuft (%s)", truncate(state.Project, projW), formatClock(now.Sub(state.Start)))
+	note := fmt.Sprintf("▶ %s running (%s)", truncate(state.Project, projW), formatClock(now.Sub(state.Start)))
 	var in []string
 	for _, c := range cols {
 		if runningInPeriod(state, c.per, weekStart) {
@@ -200,7 +207,7 @@ func runningNote(state *watson.State, cols []overviewColumn, weekStart time.Week
 	}
 	// Second line: the column list is the billing-relevant part and must not
 	// compete with the project name for the terminal width.
-	return note + "\n  eingerechnet in: " + strings.Join(in, ", ")
+	return note + "\n  counted in: " + strings.Join(in, ", ")
 }
 
 // overviewView renders the billing overview (stateless). A running timer is
@@ -220,13 +227,13 @@ func overviewView(frames []watson.Frame, state *watson.State, weekStart time.Wee
 		// dropped a column the list of names is longer than the line.
 		b.WriteString(styleDim.Width(width).Render(droppedNote(cols, dropped)) + "\n\n")
 	}
-	fmt.Fprintf(&b, "%-*s", projW, truncate("Projekt", projW))
+	fmt.Fprintf(&b, "%-*s", projW, truncate("Project", projW))
 	for _, i := range keep {
 		fmt.Fprintf(&b, " %*s", cellW, columnHeader(cols[i], cellW))
 	}
 	b.WriteString("\n\n")
 	if len(rows) == 0 {
-		b.WriteString(styleDim.Render("keine Frames vorhanden") + "\n")
+		b.WriteString(styleDim.Render("no frames yet") + "\n")
 	}
 	for _, r := range rows {
 		fmt.Fprintf(&b, "%-*s", projW, truncate(r.project, projW))
@@ -241,7 +248,7 @@ func overviewView(frames []watson.Frame, state *watson.State, weekStart time.Wee
 	// grand total — the one number on this screen that goes on an invoice, and the
 	// only line that was still illegible. A cut label reads as cut; a cut number
 	// does not.
-	totalLine := fmt.Sprintf("%-*s", projW, truncate("Gesamt", projW))
+	totalLine := fmt.Sprintf("%-*s", projW, truncate("Total", projW))
 	for _, i := range keep {
 		totalLine += fmt.Sprintf(" %*s", cellW, truncate(cellDuration(totals[i]), cellW))
 	}

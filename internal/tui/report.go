@@ -161,7 +161,7 @@ func (m reportModel) view(frames []watson.Frame, state *watson.State, weekStart 
 
 	var b strings.Builder
 	if len(lines) == 0 {
-		b.WriteString(styleDim.Render(truncate("keine Frames im Zeitraum", width)) + "\n")
+		b.WriteString(styleDim.Render(truncate("no frames in this period", width)) + "\n")
 	}
 	for _, l := range lines {
 		cell, number := reportRow(l.project, formatDuration(l.total), labelW, durW)
@@ -174,14 +174,14 @@ func (m reportModel) view(frames []watson.Frame, state *watson.State, weekStart 
 			b.WriteString(styleDim.Render(cell) + " " + number + "\n")
 		}
 	}
-	cell, number := reportRow("Gesamt", formatDuration(grand), labelW, durW)
+	cell, number := reportRow("Total", formatDuration(grand), labelW, durW)
 	b.WriteString("\n" + styleTitle.Render(cell+" "+number))
 	if runningInPeriod(state, m.per, weekStart) {
 		// Truncated twice: the project name to the label column, then the whole
 		// sentence to the width. The second cut can reach the clock on a very narrow
 		// terminal, but it leaves an ellipsis where fitBody left nothing — and the
 		// running timer's contribution also stands in its project's row above.
-		note := fmt.Sprintf("▶ %s läuft (%s) und ist eingerechnet",
+		note := fmt.Sprintf("▶ %s running (%s), included",
 			truncate(state.Project, labelW), formatClock(now.Sub(state.Start)))
 		b.WriteString("\n\n" + styleRunning.Render(truncate(note, width)))
 	}

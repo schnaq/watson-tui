@@ -63,10 +63,10 @@ func TestBuildOverviewEmpty(t *testing.T) {
 func TestOverviewViewEmpty(t *testing.T) {
 	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
 	out := overviewView(nil, nil, time.Monday, now, 120)
-	if !strings.Contains(out, "keine Frames vorhanden") {
+	if !strings.Contains(out, "no frames yet") {
 		t.Errorf("empty overview missing placeholder:\n%s", out)
 	}
-	if !strings.Contains(out, "Gesamt") {
+	if !strings.Contains(out, "Total") {
 		t.Errorf("empty overview missing total line:\n%s", out)
 	}
 }
@@ -98,8 +98,8 @@ func TestPeriodAttributionByStart(t *testing.T) {
 		mkFrame("a1111111111111111111111111111111", "alpha", start, 3*time.Hour),
 	}
 
-	// buildOverview: mid-August "now", so dieser Monat = August (index 2) and
-	// letzter Monat = Juli (index 3); neither week column contains the frame.
+	// buildOverview: mid-August "now", so this month = August (index 2) and
+	// last month = July (index 3); neither week column contains the frame.
 	now := time.Date(2026, 8, 15, 12, 0, 0, 0, time.Local)
 	cols := overviewColumns(now, time.Monday)
 	rows, totals := buildOverview(frames, cols, time.Monday)
@@ -120,7 +120,7 @@ func TestPeriodAttributionByStart(t *testing.T) {
 	july := period{unit: unitMonth, ref: time.Date(2026, 7, 15, 12, 0, 0, 0, time.Local)}
 	lines, grand := aggregate(frames, july, time.Monday)
 	if grand != 3*time.Hour || len(lines) != 1 || lines[0].total != 3*time.Hour {
-		t.Errorf("Juli: grand=%v lines=%+v, want 3h on alpha", grand, lines)
+		t.Errorf("July: grand=%v lines=%+v, want 3h on alpha", grand, lines)
 	}
 	august := period{unit: unitMonth, ref: now}
 	lines, grand = aggregate(frames, august, time.Monday)
@@ -131,19 +131,23 @@ func TestPeriodAttributionByStart(t *testing.T) {
 
 // TestRunningNoteNamesColumns: the note must name the columns the running
 // frame actually lands in. A timer left running over the weekend counts into
-// letzte Woche — claiming it for the diese Woche column an invoice is written
+// last week — claiming it for the this week column an invoice is written
 // from would overstate that week. The assertions run against runningNote
 // directly because the column titles also appear as table headers.
+//
+// The list of columns is asserted whole rather than name by name: the column
+// order is the table's, and "all" on its own is too short a substring to be
+// evidence of anything.
 func TestRunningNoteNamesColumns(t *testing.T) {
-	now := time.Date(2026, 7, 22, 12, 0, 0, 0, time.Local) // Mittwoch
+	now := time.Date(2026, 7, 22, 12, 0, 0, 0, time.Local) // Wednesday
 	cols := overviewColumns(now, time.Monday)
 
 	lastWeek := &watson.State{Project: "alpha", Start: time.Date(2026, 7, 18, 10, 0, 0, 0, time.Local), Tags: []string{}}
 	note := runningNote(lastWeek, cols, time.Monday, now, overviewProjMax)
-	if strings.Contains(note, "diese Woche") {
-		t.Errorf("timer from last week must not be claimed for diese Woche:\n%s", note)
+	if strings.Contains(note, "this week") {
+		t.Errorf("timer from last week must not be claimed for this week:\n%s", note)
 	}
-	for _, want := range []string{"alpha", "läuft", "eingerechnet in:", "letzte Woche", "dieser Monat", "gesamt"} {
+	for _, want := range []string{"alpha", "running", "counted in: last week, this month, all"} {
 		if !strings.Contains(note, want) {
 			t.Errorf("note missing %q:\n%s", want, note)
 		}
@@ -151,15 +155,15 @@ func TestRunningNoteNamesColumns(t *testing.T) {
 
 	thisWeek := &watson.State{Project: "alpha", Start: now.Add(-time.Hour), Tags: []string{}}
 	note = runningNote(thisWeek, cols, time.Monday, now, overviewProjMax)
-	if !strings.Contains(note, "diese Woche") {
-		t.Errorf("timer from today must be claimed for diese Woche:\n%s", note)
+	if !strings.Contains(note, "this week") {
+		t.Errorf("timer from today must be claimed for this week:\n%s", note)
 	}
-	if strings.Contains(note, "letzte Woche") {
-		t.Errorf("timer from today must not be claimed for letzte Woche:\n%s", note)
+	if strings.Contains(note, "last week") {
+		t.Errorf("timer from today must not be claimed for last week:\n%s", note)
 	}
 
 	out := overviewView(nil, lastWeek, time.Monday, now, 120)
-	if !strings.Contains(out, "eingerechnet in:") {
+	if !strings.Contains(out, "counted in:") {
 		t.Errorf("view must disclose which columns count the timer:\n%s", out)
 	}
 }

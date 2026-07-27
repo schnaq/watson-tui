@@ -19,7 +19,7 @@ type startModel struct {
 func newStartModel(frames []watson.Frame) startModel {
 	p := textinput.New()
 	p.Prompt = ""
-	p.Placeholder = "Projekt"
+	p.Placeholder = "Project"
 	p.Width = 40
 	p.ShowSuggestions = true
 	p.SetSuggestions(projectNames(frames))
@@ -36,7 +36,7 @@ func (m startModel) view() string {
 	var b strings.Builder
 	cursors := [2]string{"  ", "  "}
 	cursors[m.focus] = "> "
-	b.WriteString(cursors[0] + "Projekt " + m.project.View() + "\n")
+	b.WriteString(cursors[0] + "Project " + m.project.View() + "\n")
 	b.WriteString(cursors[1] + "Tags    " + m.tags.View() + "\n")
 	if m.errMsg != "" {
 		b.WriteString("\n" + styleError.Render(m.errMsg))

@@ -42,7 +42,7 @@ func TestOverviewFitNeverExceedsWidth(t *testing.T) {
 			t.Fatalf("width %d: every column dropped", width)
 		}
 		if keep[len(keep)-1] != n-1 {
-			t.Errorf("width %d: kept %v, gesamt (%d) must be the last column standing",
+			t.Errorf("width %d: kept %v, all (%d) must be the last column standing",
 				width, keep, n-1)
 		}
 		if total := projW + len(keep)*(cellW+1); total > width {
@@ -64,12 +64,12 @@ func TestOverviewFitNeverExceedsWidth(t *testing.T) {
 // the width, and that property does not imply the rendered one: the totals row
 // wrote its label with a bare %-*s, so from width 15 down it ran one to five
 // columns past the table and fitBody ate the digits of the single number an
-// invoice is copied from — "Gesamt    4h 02" at 15, "Gesamt    4" at 11 — while
+// invoice is copied from — "Total     4h 02" at 15, "Total     4" at 11 — while
 // the arithmetic test stayed green.
 //
 // No running timer: its note is prose whose second line fitBody still cuts below
 // ~50 columns (recorded in task-4-fixes-report.md), and this sweep is about the
-// table. Frames are non-empty because the "keine Frames" hint is not width-bound
+// table. Frames are non-empty because the "no frames yet" hint is not width-bound
 // either and would fail the sweep for a reason that is not the finding.
 func TestOverviewRenderedLinesFitEveryWidth(t *testing.T) {
 	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
@@ -92,7 +92,7 @@ func TestOverviewRenderedLinesFitEveryWidth(t *testing.T) {
 		// alone would pass on a row whose label overflowed, because the same value
 		// stands in several columns.
 		keep, _, projW, cellW := overviewFit(width, len(cols))
-		want := fmt.Sprintf("%-*s", projW, truncate("Gesamt", projW))
+		want := fmt.Sprintf("%-*s", projW, truncate("Total", projW))
 		for _, i := range keep {
 			want += fmt.Sprintf(" %*s", cellW, truncate(cellDuration(totals[i]), cellW))
 		}
@@ -143,7 +143,7 @@ func TestOverviewNarrowKeepsExactDurations(t *testing.T) {
 			t.Errorf("row %q is not rendered as computed:\nwant %q\ngot\n%s", r.project, want, out)
 		}
 	}
-	if want := row("Gesamt", totals); !strings.Contains(out, want) {
+	if want := row("Total", totals); !strings.Contains(out, want) {
 		t.Errorf("total row is not rendered as computed:\nwant %q\ngot\n%s", want, out)
 	}
 	// The digits themselves, spelled out: a clipped cell loses the tail, so
@@ -161,16 +161,16 @@ func TestOverviewNarrowKeepsExactDurations(t *testing.T) {
 }
 
 // TestOverviewDropOrderIsPriority pins the sequence in which value columns are
-// given up. Only "gesamt survives last" was pinned, so the middle of the order
+// given up. Only "all survives last" was pinned, so the middle of the order
 // was free: mutating overviewDropOrder from {1,3,2,0} to {1,2,3,0} — giving up
-// dieser Monat before letzter Monat, the wrong way round for someone writing last
+// this month before last month, the wrong way round for someone writing last
 // month's invoice — left the whole suite green.
 func TestOverviewDropOrderIsPriority(t *testing.T) {
 	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
 	cols := overviewColumns(now, time.Monday)
-	// The documented priority: what an invoice needs least goes first. gesamt is
+	// The documented priority: what an invoice needs least goes first. all is
 	// not in it, so it is the column that always survives.
-	want := []string{"letzte Woche", "letzter Monat", "dieser Monat", "diese Woche"}
+	want := []string{"last week", "last month", "this month", "this week"}
 
 	got := make([]string, 0, len(overviewDropOrder))
 	for _, i := range overviewDropOrder {
@@ -214,12 +214,12 @@ func TestOverviewNamesDroppedColumns(t *testing.T) {
 	cols := overviewColumns(now, time.Monday)
 
 	// Wide enough for all five: no note at all.
-	if out := overviewView(frames, nil, time.Monday, now, 120); strings.Contains(out, "zu schmal") {
+	if out := overviewView(frames, nil, time.Monday, now, 120); strings.Contains(out, "too narrow") {
 		t.Errorf("nothing is dropped at 120 columns, so there must be no note:\n%s", out)
 	}
 	// At 60 exactly one column goes, and the note fits a line, so it has to
 	// stand in the rendered view word for word.
-	if out := overviewView(frames, nil, time.Monday, now, 60); !strings.Contains(out, "zu schmal für: letzte Woche") {
+	if out := overviewView(frames, nil, time.Monday, now, 60); !strings.Contains(out, "too narrow for: last week") {
 		t.Errorf("60 columns must name the dropped column:\n%s", out)
 	}
 	// Narrower still: the note wraps, so the column names are asserted against
@@ -237,7 +237,7 @@ func TestOverviewNamesDroppedColumns(t *testing.T) {
 					width, note, cols[i].title)
 			}
 		}
-		if out := overviewView(frames, nil, time.Monday, now, width); !strings.Contains(out, "zu schmal für:") {
+		if out := overviewView(frames, nil, time.Monday, now, width); !strings.Contains(out, "too narrow for:") {
 			t.Errorf("width %d: dropped %v without saying so:\n%s", width, dropped, out)
 		}
 	}
@@ -283,18 +283,37 @@ func TestOverviewViewFitsWidth(t *testing.T) {
 }
 
 // TestOverviewShortTitles: narrow value columns fall back to short headers
-// instead of cutting "letzter Monat" mid-word.
+// instead of cutting "last month" mid-word.
+//
+// Three widths, because the English titles moved the threshold and the middle
+// one is a knife edge. "last month" is ten runes; the value column is thirteen
+// wide until 94 columns and bottoms out at overviewCellMin = 9. At 80 the cell
+// is exactly ten, so the full title still fits — the fallback starts at 78, not
+// at 80 as it did with the longer German titles. All three are pinned so that a
+// future change to the widths cannot silently move the boundary again.
+//
+// "this week" and "last week" are nine runes, i.e. exactly overviewCellMin, so
+// their short forms are unreachable by construction: the full title fits at
+// every width the table survives at. That is the better outcome — a full title
+// that fits beats a short one — but it means only the two month columns
+// exercise the mechanism.
 func TestOverviewShortTitles(t *testing.T) {
 	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
 	wide := overviewView(nil, nil, time.Monday, now, 200)
-	if !strings.Contains(wide, "letzter Monat") {
+	if !strings.Contains(wide, "last month") {
 		t.Errorf("wide view must use full titles:\n%s", wide)
 	}
-	narrow := overviewView(nil, nil, time.Monday, now, 80)
-	if !strings.Contains(narrow, "Vormonat") {
+	// 80 columns: the cell is ten wide and "last month" fits it exactly.
+	if edge := overviewView(nil, nil, time.Monday, now, 80); !strings.Contains(edge, "last month") {
+		t.Errorf("at 80 columns the full title still fits and must be used:\n%s", edge)
+	}
+	// 70: the cell is at its minimum of nine, so the month columns shorten. All
+	// five columns are still shown, so "prev mo" cannot come from the drop note.
+	narrow := overviewView(nil, nil, time.Monday, now, 70)
+	if !strings.Contains(narrow, "prev mo") {
 		t.Errorf("narrow view must use short titles:\n%s", narrow)
 	}
-	if strings.Contains(narrow, "letzter Monat") {
+	if strings.Contains(narrow, "last month") {
 		t.Errorf("narrow view must not use full titles:\n%s", narrow)
 	}
 }
@@ -324,7 +343,7 @@ func TestOverviewCountsRunningTimer(t *testing.T) {
 	if !strings.Contains(out, "beta") {
 		t.Errorf("view must list the running project:\n%s", out)
 	}
-	if !strings.Contains(out, "läuft") {
+	if !strings.Contains(out, "running") {
 		t.Errorf("view must flag that a running timer is included:\n%s", out)
 	}
 }
@@ -353,7 +372,7 @@ func TestHeaderFieldsPerModeContext(t *testing.T) {
 	app.Update(key("r"))
 	app.report.per = period{unit: unitMonth, ref: time.Date(2026, 7, 22, 0, 0, 0, 0, time.Local)}
 	got := renderFieldsFlat(app.headerFields())
-	if !strings.Contains(got, "Report") || !strings.Contains(got, "Juli 2026") {
+	if !strings.Contains(got, "Report") || !strings.Contains(got, "July 2026") {
 		t.Errorf("report header = %q, want Report and the report period", got)
 	}
 }
@@ -389,7 +408,7 @@ func TestOverviewDropNoteSurvivesShortTerminals(t *testing.T) {
 		app.now = now
 		app.mode = modeOverview
 		out := app.View()
-		if !strings.Contains(out, "zu schmal für") {
+		if !strings.Contains(out, "too narrow for") {
 			t.Errorf("60x%d: the note about the dropped column must survive the "+
 				"height cut:\n%s", height, out)
 		}

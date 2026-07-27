@@ -14,7 +14,7 @@ import (
 // the number survives. The view formatted its lines as "%-32s %10s" — 43 columns
 // regardless of the terminal — so from a body width of 46 down fitBody cut the
 // right edge, and because the number is right-aligned the digits went first:
-// "kunde-a  124h 30" at 46, "Gesamt  124" and "kunde-a  124" at 42. Unlike the
+// "kunde-a  124h 30" at 46, "Total  124" and "kunde-a  124" at 42. Unlike the
 // overview's clip this one is not inherited from v0.1.0; before the chrome the
 // line simply wrapped.
 //
@@ -141,7 +141,7 @@ func TestReportViewRenders(t *testing.T) {
 		mkFrame("a1111111111111111111111111111111", "alpha", day, 2*time.Hour, "code"),
 	}
 	out := reportModel{per: period{unit: unitWeek, ref: day}}.view(frames, nil, time.Monday, day, 80)
-	for _, want := range []string{"alpha", "[code]", "Gesamt", "2h 00m"} {
+	for _, want := range []string{"alpha", "[code]", "Total", "2h 00m"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("view missing %q in:\n%s", want, out)
 		}
@@ -162,7 +162,7 @@ func TestReportViewRenders(t *testing.T) {
 // TestReportViewEmpty: empty period shows the hint line.
 func TestReportViewEmpty(t *testing.T) {
 	out := newReportModel(time.Now(), time.Monday).view(nil, nil, time.Monday, time.Now(), 80)
-	if !strings.Contains(out, "keine Frames im Zeitraum") {
+	if !strings.Contains(out, "no frames in this period") {
 		t.Errorf("empty report must show hint, got:\n%s", out)
 	}
 }
@@ -197,7 +197,7 @@ func TestReportCountsRunningTimer(t *testing.T) {
 	now := time.Now()
 	state := &watson.State{Project: "laufend", Start: now.Add(-90 * time.Minute), Tags: []string{"live"}}
 	out := reportModel{per: period{unit: unitWeek, ref: now}}.view(nil, state, time.Monday, now, 80)
-	for _, want := range []string{"laufend", "1h 30m", "eingerechnet"} {
+	for _, want := range []string{"laufend", "1h 30m", "included"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("running timer missing %q in:\n%s", want, out)
 		}
