@@ -483,7 +483,7 @@ func (a *App) headerFields() [][]headerField {
 		n := 0
 		projects := map[string]bool{}
 		for _, r := range a.list.rows {
-			if !r.isHeader {
+			if r.kind == rowFrame {
 				n++
 				projects[r.frame.Project] = true
 			}

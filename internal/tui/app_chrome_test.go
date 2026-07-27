@@ -515,7 +515,7 @@ func TestHeaderSumAddsUpToTheDayTotals(t *testing.T) {
 		app.list.refresh(app.frames, app.cfg.WeekStart)
 		var days time.Duration
 		for _, r := range app.list.rows {
-			if r.isHeader {
+			if r.kind == rowDayHeader {
 				days += r.total
 			}
 		}

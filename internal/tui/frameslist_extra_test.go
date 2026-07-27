@@ -61,7 +61,7 @@ func TestFirstAndNextFrameRowEmpty(t *testing.T) {
 	if firstFrameRow(nil) != -1 {
 		t.Error("firstFrameRow(nil) must be -1")
 	}
-	headers := []row{{isHeader: true}, {isHeader: true}}
+	headers := []row{{kind: rowDayHeader}, {kind: rowDayHeader}}
 	if firstFrameRow(headers) != -1 {
 		t.Error("firstFrameRow(all headers) must be -1")
 	}
@@ -218,5 +218,28 @@ func TestLabelsAreEnglishISO(t *testing.T) {
 	}
 	if got := formatDay(ref); got != "Wednesday, 2026-07-22" {
 		t.Errorf("formatDay = %q, want %q", got, "Wednesday, 2026-07-22")
+	}
+}
+
+// TestRowSelectability: the cursor rests on frames in the list and on projects
+// in the summary — never on a header, a tag line or a blank.
+func TestRowSelectability(t *testing.T) {
+	cases := map[rowKind]bool{
+		rowFrame: true, rowProject: true,
+		rowDayHeader: false, rowTag: false, rowBlank: false,
+	}
+	for kind, want := range cases {
+		if got := (row{kind: kind}).selectable(); got != want {
+			t.Errorf("kind %d selectable = %v, want %v", kind, got, want)
+		}
+	}
+}
+
+// TestSelectedOnlyReturnsFrames: a project row is selectable but is not a
+// frame, so selected() must refuse it — otherwise enter would edit a zero frame.
+func TestSelectedOnlyReturnsFrames(t *testing.T) {
+	l := listModel{rows: []row{{kind: rowProject, title: "alpha"}}, cursor: 0}
+	if _, ok := l.selected(); ok {
+		t.Error("selected() must not return a frame for a project row")
 	}
 }

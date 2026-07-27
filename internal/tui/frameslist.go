@@ -115,14 +115,34 @@ func (p period) label(weekStart time.Weekday) string {
 	}
 }
 
+// rowKind distinguishes what a rendered line is. The frame list uses only
+// rowFrame and rowDayHeader; the summary adds the other three.
+type rowKind int
+
+const (
+	rowFrame rowKind = iota
+	rowDayHeader
+	rowProject
+	rowTag
+	rowBlank
+)
+
 // row is one display line: a day header — the day and what was booked on it —
-// or a frame. The header's two halves are kept apart instead of being formatted
-// into one string here, because only renderRow knows the width they have to fit.
+// a frame, or one of the summary's project, tag and blank lines. A header's two
+// halves are kept apart instead of being formatted into one string here, because
+// only renderRow knows the width they have to fit.
 type row struct {
-	isHeader bool
-	title    string
-	total    time.Duration
-	frame    watson.Frame
+	kind  rowKind
+	title string
+	total time.Duration
+	frame watson.Frame
+}
+
+// selectable reports whether the cursor may rest on this row. Exactly one kind
+// is selectable per view: frames in the list, projects in the summary — both
+// are the row a user would act on.
+func (r row) selectable() bool {
+	return r.kind == rowFrame || r.kind == rowProject
 }
 
 func matchesFilter(f watson.Frame, needle string) bool {
@@ -186,29 +206,29 @@ func buildRows(frames []watson.Frame, p period, weekStart time.Weekday, filter s
 	}
 	var rows []row
 	for _, g := range groups {
-		rows = append(rows, row{isHeader: true, title: formatDay(g.day), total: g.total})
+		rows = append(rows, row{kind: rowDayHeader, title: formatDay(g.day), total: g.total})
 		for _, fr := range g.frames {
-			rows = append(rows, row{frame: fr})
+			rows = append(rows, row{kind: rowFrame, frame: fr})
 		}
 	}
 	return rows
 }
 
-// firstFrameRow returns the index of the first non-header row, -1 if none.
+// firstFrameRow returns the index of the first selectable row, -1 if none.
 func firstFrameRow(rows []row) int {
 	for i, r := range rows {
-		if !r.isHeader {
+		if r.selectable() {
 			return i
 		}
 	}
 	return -1
 }
 
-// nextFrameRow returns the next non-header row index in direction dir (+1/-1),
+// nextFrameRow returns the next selectable row index in direction dir (+1/-1),
 // or from when there is none.
 func nextFrameRow(rows []row, from, dir int) int {
 	for i := from + dir; i >= 0 && i < len(rows); i += dir {
-		if !rows[i].isHeader {
+		if rows[i].selectable() {
 			return i
 		}
 	}
@@ -263,7 +283,7 @@ func (l *listModel) refresh(frames []watson.Frame, weekStart time.Weekday) {
 	l.cursor = firstFrameRow(l.rows)
 	if prevID != "" {
 		for i, r := range l.rows {
-			if !r.isHeader && r.frame.ID == prevID {
+			if r.kind == rowFrame && r.frame.ID == prevID {
 				l.cursor = i
 				break
 			}
@@ -272,7 +292,7 @@ func (l *listModel) refresh(frames []watson.Frame, weekStart time.Weekday) {
 }
 
 func (l *listModel) selected() (watson.Frame, bool) {
-	if l.cursor < 0 || l.cursor >= len(l.rows) || l.rows[l.cursor].isHeader {
+	if l.cursor < 0 || l.cursor >= len(l.rows) || l.rows[l.cursor].kind != rowFrame {
 		return watson.Frame{}, false
 	}
 	return l.rows[l.cursor].frame, true
@@ -428,7 +448,7 @@ func (l *listModel) view(height, width int) string {
 func listDurWidth(rows []row) int {
 	w := 0
 	for _, r := range rows {
-		if r.isHeader {
+		if r.kind == rowDayHeader {
 			continue
 		}
 		w = max(w, len(formatDuration(r.frame.Duration())))
@@ -463,7 +483,7 @@ func dayHeaderLine(day string, total time.Duration, width int) string {
 // same for every row — which is also what keeps the columns of the rows aligned.
 func (l *listModel) renderRow(i, width, durW int) string {
 	r := l.rows[i]
-	if r.isHeader {
+	if r.kind == rowDayHeader {
 		return styleDayHeader.Render(dayHeaderLine(r.title, r.total, width))
 	}
 	fr := r.frame

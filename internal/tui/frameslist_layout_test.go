@@ -51,7 +51,7 @@ func TestListKeepsColumnsAlignedPastNinetyNineHours(t *testing.T) {
 
 	var starts []int
 	for i, r := range l.rows {
-		if r.isHeader {
+		if r.kind != rowFrame {
 			continue
 		}
 		fr := r.frame

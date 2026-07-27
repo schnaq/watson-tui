@@ -59,7 +59,7 @@ func TestBuildRowsGroupsAndFilters(t *testing.T) {
 	if len(rows) != 5 { // 2 day headers + 3 frames
 		t.Fatalf("got %d rows, want 5", len(rows))
 	}
-	if !rows[0].isHeader || !rows[2].isHeader {
+	if rows[0].kind != rowDayHeader || rows[2].kind != rowDayHeader {
 		t.Errorf("headers at wrong positions")
 	}
 

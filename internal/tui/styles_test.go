@@ -65,7 +65,7 @@ func TestSelectedRowCarriesMarker(t *testing.T) {
 		per:    period{unit: unitAll, ref: now},
 		cursor: 1,
 		rows: []row{
-			{isHeader: true, title: "Montag"},
+			{kind: rowDayHeader, title: "Montag"},
 			{frame: watson.Frame{
 				ID: "a1111111111111111111111111111111", Project: "alpha",
 				Start: now.Add(-2 * time.Hour), Stop: now.Add(-time.Hour), Tags: []string{},
