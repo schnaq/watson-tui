@@ -657,7 +657,7 @@ func TestComparisonRowNamesNeighbours(t *testing.T) {
 		{label: "Vorwoche", value: "5h 00m"},
 		{label: "Monat", value: "7h 00m"},
 	}
-	row := app.comparisonRow(period{unit: unitWeek, ref: now})
+	row := app.comparisonRow(app.frames, period{unit: unitWeek, ref: now})
 	if len(row) != len(want) {
 		t.Fatalf("comparison row = %+v, want %d fields", row, len(want))
 	}
@@ -666,8 +666,88 @@ func TestComparisonRowNamesNeighbours(t *testing.T) {
 			t.Errorf("field %d = %+v, want %+v", i, row[i], w)
 		}
 	}
-	if got := app.comparisonRow(period{unit: unitAll, ref: now}); len(got) != 0 {
+	if got := app.comparisonRow(app.frames, period{unit: unitAll, ref: now}); len(got) != 0 {
 		t.Errorf("unitAll has no comparison row, got %+v", got)
+	}
+}
+
+// TestComparisonRowFollowsTheListFilter: with a filter active the Summe narrows
+// to the filtered frames, so the neighbours beside it have to narrow too.
+// Summing every frame made them describe a different set than the number they
+// sit next to, with nothing on screen saying so — the reader has no way to tell
+// "5h last week" (this project) from "8h last week" (all of them).
+//
+// Both cases are asserted, because a comparison row that ignores the filter is
+// right in the unfiltered one, and only the pair shows the difference.
+func TestComparisonRowFollowsTheListFilter(t *testing.T) {
+	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
+	app := newTestApp(t)
+	app.now = now
+	app.frames = []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "schnaq",
+			time.Date(2026, 7, 14, 9, 0, 0, 0, time.Local), 5*time.Hour),
+		mkFrame("b2222222222222222222222222222222", "kunde-a",
+			time.Date(2026, 7, 14, 14, 0, 0, 0, time.Local), 3*time.Hour),
+		mkFrame("c3333333333333333333333333333333", "schnaq",
+			time.Date(2026, 7, 21, 9, 0, 0, 0, time.Local), 2*time.Hour),
+	}
+	app.list.per = period{unit: unitWeek, ref: now}.shift(app.cfg.WeekStart, 0)
+
+	cases := []struct{ filter, vorwoche, monat string }{
+		{"", "8h 00m", "10h 00m"},
+		{"schnaq", "5h 00m", "7h 00m"},
+	}
+	for _, tc := range cases {
+		app.list.filter = tc.filter
+		app.list.refresh(app.frames, app.cfg.WeekStart)
+		fields := app.headerFields()
+		for _, want := range []struct{ label, value string }{
+			{"Vorwoche", tc.vorwoche}, {"Monat", tc.monat},
+		} {
+			got, ok := headerFieldByLabel(fields, want.label)
+			if !ok {
+				t.Fatalf("filter %q: the header has no %s field", tc.filter, want.label)
+			}
+			if got != want.value {
+				t.Errorf("filter %q: %s = %q, want %q", tc.filter, want.label, got, want.value)
+			}
+		}
+	}
+}
+
+// TestReportComparisonCountsTheRunningTimer: the report's Summe counts the
+// running timer, so its neighbours have to as well. Otherwise the month renders
+// smaller than the week it contains — "Summe 3h 00m" beside "Monat 2h 00m" — and
+// nothing on screen explains the difference.
+func TestReportComparisonCountsTheRunningTimer(t *testing.T) {
+	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
+	app := newTestApp(t)
+	app.now = now
+	app.mode = modeReport
+	app.report.per = period{unit: unitWeek, ref: now}.shift(app.cfg.WeekStart, 0)
+	app.frames = []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "schnaq",
+			time.Date(2026, 7, 21, 9, 0, 0, 0, time.Local), 2*time.Hour),
+	}
+	app.state = &watson.State{Project: "kunde-a", Start: now.Add(-time.Hour), Tags: []string{}}
+
+	fields := app.headerFields()
+	month := period{unit: unitMonth, ref: app.report.per.ref}
+	_, want := aggregate(withRunning(app.frames, app.state, app.now), month, app.cfg.WeekStart)
+	got, ok := headerFieldByLabel(fields, "Monat")
+	if !ok {
+		t.Fatal("the report header has no Monat field")
+	}
+	if got != formatDuration(want) {
+		t.Errorf("Monat = %q, want %q", got, formatDuration(want))
+	}
+	// The month contains the week, so it can never be the smaller number.
+	if sum, _ := headerFieldByLabel(fields, "Summe"); want < sumInPeriod(
+		withRunning(app.frames, app.state, app.now), app.report.per, app.cfg.WeekStart) {
+		t.Errorf("Monat %q is smaller than the Summe %q of the week inside it", got, sum)
+	}
+	if without := formatDuration(sumInPeriod(app.frames, month, app.cfg.WeekStart)); got == without {
+		t.Fatalf("the fixture's timer contributes nothing to the month (also %q)", without)
 	}
 }
 
@@ -676,7 +756,7 @@ func TestComparisonRowShowsDashForZero(t *testing.T) {
 	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
 	app := newTestApp(t)
 	app.now = now
-	row := app.comparisonRow(period{unit: unitWeek, ref: now})
+	row := app.comparisonRow(app.frames, period{unit: unitWeek, ref: now})
 	for _, f := range row {
 		if strings.Contains(f.value, "0m") {
 			t.Errorf("zero must read as a dash, got %q", f.value)

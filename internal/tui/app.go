@@ -436,14 +436,22 @@ func (a *App) sumFieldWithRunning(frames []watson.Frame, p period) headerField {
 // the larger one containing it — so a number has something to be read against.
 // Zero reads as a dash: "0m" invites the question whether it means nothing was
 // booked or nothing is known.
-func (a *App) comparisonRow(p period) []headerField {
+//
+// The frames come from the caller and are not a.frames, because a neighbour is
+// only readable against the Summe beside it if both describe the same set. The
+// list passes its filtered frames — under an active filter the neighbours used to
+// sum every project, so "5h this week" for one project sat next to "8h last week"
+// for all of them, with nothing on screen marking the difference. The report
+// passes frames the running timer is already part of, so its "Monat" cannot come
+// out smaller than the "Summe" of the week that month contains.
+func (a *App) comparisonRow(frames []watson.Frame, p period) []headerField {
 	cs := comparisonPeriods(p)
 	if len(cs) == 0 {
 		return nil
 	}
 	fields := make([]headerField, 0, len(cs))
 	for _, c := range cs {
-		d := sumInPeriod(a.frames, c.per, a.cfg.WeekStart)
+		d := sumInPeriod(frames, c.per, a.cfg.WeekStart)
 		value := "–"
 		if d > 0 {
 			value = formatDuration(d)
@@ -480,18 +488,25 @@ func (a *App) headerFields() [][]headerField {
 		} else if a.list.filter != "" {
 			filter = a.list.filter
 		}
+		// One set of frames for the whole header row block: the ones the list shows.
+		// The sum sits above the day totals of exactly these, and the neighbours are
+		// read against that sum.
+		shown := filterFrames(a.frames, a.list.filter)
 		return [][]headerField{
-			{a.periodField("Zeitraum", a.list.per),
-				a.sumFieldWithoutRunning(filterFrames(a.frames, a.list.filter), a.list.per)},
-			a.comparisonRow(a.list.per),
+			{a.periodField("Zeitraum", a.list.per), a.sumFieldWithoutRunning(shown, a.list.per)},
+			a.comparisonRow(shown, a.list.per),
 			{{"Filter", filter}, {"", fmt.Sprintf("%d Frames · %d Projekte", n, len(projects))}},
 			{{}, timer},
 		}
 	case modeReport:
-		lines, _ := aggregate(withRunning(a.frames, a.state, a.now), a.report.per, a.cfg.WeekStart)
+		// The report body counts the running timer, so every number in its header
+		// does too. sumFieldWithRunning is handed the plain frames and adds the timer
+		// itself — passing it counted would count the timer twice.
+		counted := withRunning(a.frames, a.state, a.now)
+		lines, _ := aggregate(counted, a.report.per, a.cfg.WeekStart)
 		return [][]headerField{
 			{a.periodField("Report", a.report.per), a.sumFieldWithRunning(a.frames, a.report.per)},
-			a.comparisonRow(a.report.per),
+			a.comparisonRow(counted, a.report.per),
 			{{}, {"", fmt.Sprintf("%d Projekte", len(lines))}},
 			{{}, timer},
 		}
