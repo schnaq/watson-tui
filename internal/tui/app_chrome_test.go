@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -463,7 +464,7 @@ func TestSumFieldMatchesTheListAndFlagsTheTimer(t *testing.T) {
 	}
 	p := period{unit: unitAll, ref: now}
 
-	f := app.sumField(p)
+	f := app.sumFieldWithoutRunning(app.frames, p)
 	if !strings.Contains(f.value, "2h 30m") {
 		t.Errorf("sum = %q, want 2h 30m", f.value)
 	}
@@ -472,7 +473,7 @@ func TestSumFieldMatchesTheListAndFlagsTheTimer(t *testing.T) {
 	}
 
 	app.state = &watson.State{Project: "läuft", Start: now.Add(-time.Hour), Tags: []string{}}
-	f = app.sumField(p)
+	f = app.sumFieldWithoutRunning(app.frames, p)
 	if !strings.Contains(f.value, "2h 30m") {
 		t.Errorf("running timer must not change the sum: %q", f.value)
 	}
@@ -486,7 +487,7 @@ func TestSumFieldMatchesTheListAndFlagsTheTimer(t *testing.T) {
 // and the list also filters. Summing a.frames unfiltered puts a header of
 // "3h 00m" above day totals adding up to "1h 00m", which reads as a bug in the
 // day totals. The filtered case is the one that used to disagree; the plain one
-// is here so a sumField that always returns zero cannot pass.
+// is here so a sum field that always returns zero cannot pass.
 func TestHeaderSumAddsUpToTheDayTotals(t *testing.T) {
 	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
 	app := newTestApp(t)
@@ -508,7 +509,7 @@ func TestHeaderSumAddsUpToTheDayTotals(t *testing.T) {
 				days += r.total
 			}
 		}
-		// The rendered header, not sumField: the list narrows the frames at the
+		// The rendered header, not the sum field: the list narrows the frames at the
 		// call site, and the constraint is about what the user reads.
 		// Equality, not Contains: "1h 00m" is a substring of "11h 00m", so a
 		// header that counted too much would pass a contains-check.
@@ -519,6 +520,109 @@ func TestHeaderSumAddsUpToTheDayTotals(t *testing.T) {
 		if want := formatDuration(days); got != want {
 			t.Errorf("filter %q: header sum %q, day totals %q", filter, got, want)
 		}
+	}
+}
+
+// durationPattern matches a duration the way formatDuration renders one. Used to
+// read numbers back off a rendered body.
+var durationPattern = regexp.MustCompile(`\d+h \d+m|\d+m`)
+
+// bodyDurations returns the durations the body printed on its first line
+// containing label, left to right. It lets a test compare a header field against
+// the number the body actually put on screen instead of against a literal: a
+// literal pins one arithmetic case, while the header's whole reason to exist is
+// that it agrees with the body below it for every case.
+//
+// Contains rather than a prefix, and a regexp rather than field splitting,
+// because the totals line is styled — under go test the profile is ASCII and the
+// styling is a no-op, but a forced colour profile must not turn this into a
+// puzzle about escape bytes.
+func bodyDurations(t *testing.T, body, label string) []string {
+	t.Helper()
+	for _, line := range strings.Split(body, "\n") {
+		if strings.Contains(line, label) {
+			if got := durationPattern.FindAllString(line, -1); len(got) > 0 {
+				return got
+			}
+		}
+	}
+	t.Fatalf("no %q line with a duration in the body:\n%s", label, body)
+	return nil
+}
+
+// TestReportHeaderSumEqualsTheBodysGesamt is the invariant the report header
+// exists for, and the one it violated: the header said "2h 00m + läuft" over a
+// body that said "Gesamt 3h 00m" and "▶ … läuft … und ist eingerechnet". Two
+// numbers for one period, and two annotations contradicting each other about
+// whether the running hour is inside the number — in the view an invoice is
+// written from.
+//
+// Asserted against the body's own Gesamt, not against "3h 00m": a literal pins
+// this fixture, whereas the header has to agree with the body whatever the
+// frames are. The last check is what makes the fixture load-bearing — the
+// running timer must actually move the number, or a header that ignored it
+// entirely would pass by coincidence.
+func TestReportHeaderSumEqualsTheBodysGesamt(t *testing.T) {
+	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
+	app := newTestApp(t)
+	app.now = now
+	app.mode = modeReport
+	app.report.per = period{unit: unitWeek, ref: now}.shift(app.cfg.WeekStart, 0)
+	app.frames = []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "schnaq",
+			time.Date(2026, 7, 21, 9, 0, 0, 0, time.Local), 2*time.Hour),
+	}
+	app.state = &watson.State{Project: "kunde-a", Start: now.Add(-time.Hour), Tags: []string{}}
+
+	head, ok := headerFieldByLabel(app.headerFields(), "Summe")
+	if !ok {
+		t.Fatal("the report header has no Summe field")
+	}
+	body := app.report.view(app.frames, app.state, app.cfg.WeekStart, app.now, app.width)
+	gesamt := bodyDurations(t, body, "Gesamt")
+	if want := gesamt[len(gesamt)-1]; head != want {
+		t.Errorf("header sum %q, body Gesamt %q", head, want)
+	}
+	// The body says the timer is counted; a flag that reads "not counted" on a
+	// number that counts it is worse than no flag.
+	if strings.Contains(head, "läuft") {
+		t.Errorf("the report counts the timer, so its sum must not be flagged: %q", head)
+	}
+	if without := formatDuration(sumInPeriod(app.frames, app.report.per, app.cfg.WeekStart)); head == without {
+		t.Fatalf("the fixture's timer contributes nothing (sum without it is also %q)", without)
+	}
+}
+
+// TestOverviewHeaderSumEqualsTheGesamtColumn: the overview's header number is
+// correct today, and this keeps it that way. Same shape as the report's test,
+// against the last cell of the table's Gesamt row — the column billing reads.
+func TestOverviewHeaderSumEqualsTheGesamtColumn(t *testing.T) {
+	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
+	app := newTestApp(t)
+	app.now = now
+	app.mode = modeOverview
+	app.frames = []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "schnaq",
+			time.Date(2026, 7, 21, 9, 0, 0, 0, time.Local), 2*time.Hour),
+		mkFrame("b2222222222222222222222222222222", "kunde-b",
+			time.Date(2026, 6, 30, 9, 0, 0, 0, time.Local), 45*time.Minute),
+	}
+	app.state = &watson.State{Project: "kunde-a", Start: now.Add(-time.Hour), Tags: []string{}}
+
+	head, ok := headerFieldByLabel(app.headerFields(), "Summe gesamt")
+	if !ok {
+		t.Fatal("the overview header has no Summe gesamt field")
+	}
+	body := overviewView(app.frames, app.state, app.cfg.WeekStart, app.now, app.width)
+	cells := bodyDurations(t, body, "Gesamt")
+	if want := cells[len(cells)-1]; head != want {
+		t.Errorf("header sum %q, gesamt column %q", head, want)
+	}
+	if strings.Contains(head, "läuft") {
+		t.Errorf("the overview counts the timer, so its sum must not be flagged: %q", head)
+	}
+	if without := formatDuration(sumInPeriod(app.frames, period{unit: unitAll, ref: now}, app.cfg.WeekStart)); head == without {
+		t.Fatalf("the fixture's timer contributes nothing (sum without it is also %q)", without)
 	}
 }
 

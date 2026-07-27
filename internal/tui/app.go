@@ -394,27 +394,42 @@ func (a *App) periodField(label string, p period) headerField {
 	}
 }
 
-// sumField renders the sum of every frame in p. The list narrows the frames
-// first — see the call in headerFields.
-func (a *App) sumField(p period) headerField {
-	return a.sumFieldOf(a.frames, p)
-}
-
-// sumFieldOf is sumField over a given set of frames, because the list's header
-// has to count the frames the list shows: its sum sits one row above the day
-// totals, and a header of "9h 45m" above days adding up to "2h 30m" reads as a
-// bug in the day totals.
+// The header's "Summe" is a number the body underneath has to add up to, and
+// whether a running timer belongs inside it is a property of the view, not of the
+// frames a caller happens to have at hand. So there are two functions, one per
+// case, and the ` + läuft` flag follows from which one is called:
 //
-// A running timer is deliberately not counted — it is not a frame yet, and the
-// day totals below do not count it either — but it is flagged, because the
-// report and the overview do count it and the numbers would otherwise disagree
-// without saying why.
-func (a *App) sumFieldOf(frames []watson.Frame, p period) headerField {
+//   - sumFieldWithoutRunning — the timer is outside the number, so it is flagged.
+//   - sumFieldWithRunning — the timer is inside the number, so there is no flag.
+//
+// The third combination is the one this split exists to make unwritable. A single
+// sumFieldOf() decided the flag on its own, from "does a timer run in p", so
+// handing it withRunning() frames produced a header that flagged the running hour
+// as uncounted while counting it — over a report body that said the opposite in
+// words. A flag meaning "not counted" on a number that counts it is worse than no
+// flag at all.
+
+// sumFieldWithoutRunning sums the given frames over p and flags a timer running
+// in p as not counted. The list uses it: its sum sits one row above the day
+// totals, which are frames only, so a header of "9h 45m" over days adding up to
+// "2h 30m" would read as a bug in the day totals. The caller narrows the frames
+// to the ones the list shows — see headerFields.
+func (a *App) sumFieldWithoutRunning(frames []watson.Frame, p period) headerField {
 	value := formatDuration(sumInPeriod(frames, p, a.cfg.WeekStart))
 	if runningInPeriod(a.state, p, a.cfg.WeekStart) {
 		value += styleRunning.Render(" + läuft")
 	}
 	return headerField{label: "Summe", value: value}
+}
+
+// sumFieldWithRunning sums the given frames over p with the running timer counted
+// up to now, and carries no flag. The report uses it, and takes the number from
+// aggregate() — the report body's own arithmetic — so the header cannot drift
+// from the "Gesamt" it sits above: one function computes both. The body already
+// says in words that the timer is counted.
+func (a *App) sumFieldWithRunning(frames []watson.Frame, p period) headerField {
+	_, grand := aggregate(withRunning(frames, a.state, a.now), p, a.cfg.WeekStart)
+	return headerField{label: "Summe", value: formatDuration(grand)}
 }
 
 // comparisonRow renders the neighbouring periods of p — the one before it and
@@ -467,7 +482,7 @@ func (a *App) headerFields() [][]headerField {
 		}
 		return [][]headerField{
 			{a.periodField("Zeitraum", a.list.per),
-				a.sumFieldOf(filterFrames(a.frames, a.list.filter), a.list.per)},
+				a.sumFieldWithoutRunning(filterFrames(a.frames, a.list.filter), a.list.per)},
 			a.comparisonRow(a.list.per),
 			{{"Filter", filter}, {"", fmt.Sprintf("%d Frames · %d Projekte", n, len(projects))}},
 			{{}, timer},
@@ -475,7 +490,7 @@ func (a *App) headerFields() [][]headerField {
 	case modeReport:
 		lines, _ := aggregate(withRunning(a.frames, a.state, a.now), a.report.per, a.cfg.WeekStart)
 		return [][]headerField{
-			{a.periodField("Report", a.report.per), a.sumField(a.report.per)},
+			{a.periodField("Report", a.report.per), a.sumFieldWithRunning(a.frames, a.report.per)},
 			a.comparisonRow(a.report.per),
 			{{}, {"", fmt.Sprintf("%d Projekte", len(lines))}},
 			{{}, timer},
