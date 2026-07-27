@@ -45,9 +45,11 @@ Der letzte Punkt ist der tragende: Zeitraum-Navigation, Filter, Kopf und Höhenb
 
 - **Tageszeile:** `<Wochentag>, <ISO-Datum> — <Summe>`, in der Akzentfarbe wie die bisherigen Tagesheader. Ohne Erfassung steht `–` statt `0m`.
 - **Projektzeile:** zwei Leerzeichen eingerückt, `<projekt> — <summe>`. Sortiert nach Dauer absteigend, bei Gleichstand alphabetisch — wie im Report.
-- **Tagzeile:** sechs Leerzeichen eingerückt, `[<tag>  <summe>]` in der gedämpften Farbe, Summe rechtsbündig. Sortierung wie beim Projekt.
+- **Tagzeile:** sechs Leerzeichen eingerückt, `[<tag>  <summe>]` in der gedämpften Farbe. Sortierung wie beim Projekt.
 - **Leerzeile** nach jedem Projektblock und vor jeder Tageszeile, außer am Anfang.
 - **Panel-Titel:** `Summary` statt `Frames`.
+
+**Ausrichtung:** die Dauern stehen in einer Spalte, die sich nach dem längsten Namen der Ansicht richtet — nicht am rechten Rand des Terminals. Auf einem breiten Terminal soll die Zahl neben dem Namen stehen, nicht sechzig Spalten entfernt. `report.go` löst dasselbe Problem bereits mit `reportLayout` und `reportRow`; die Zusammenfassung folgt diesem Muster.
 
 Die Zahl gibt nie nach: passt eine Zeile nicht, wird der Projekt- oder Tagname mit `…` gekürzt, nie die Dauer — dieselbe Regel wie in Liste, Report und Übersicht.
 
@@ -73,7 +75,9 @@ Welche Tage der Zeitraum umfasst, liefert `period.bounds`. Bei `unitAll` gibt es
 
 ## Kopfzeile
 
-Unverändert. `Total` bleibt die Summe der angezeigten Frames ohne laufenden Timer, mit `+ running`, wenn einer läuft — die Tageszeilen der kompakten Ansicht rechnen ihn dagegen ein, wie der Report. Das ist derselbe bewusste Unterschied wie bisher zwischen Frameliste und Report; die README erklärt ihn bereits.
+**Korrigiert nach der Umsetzung.** Der ursprüngliche Entwurf ließ `Total` auch in der kompakten Ansicht den laufenden Timer aussparen und mit `+ running` markieren — das war falsch. Die Tageszeilen der Zusammenfassung rechnen ihn ein, weil sie aus `aggregate` kommen; ein Kopf ohne ihn widerspräche also seinem eigenen Body. Genau dieser Fehler wurde im Report schon einmal behoben.
+
+Deshalb gilt: in der **Frameliste** bleibt `Total` ohne laufenden Timer, mit `+ running` — dort schließen die Tagessummen ihn auch aus. In der **Zusammenfassung** zählt `Total` ihn mit und trägt keine Markierung, wie im Report und in der Übersicht. Der Kopf stimmt damit in beiden Darstellungen mit dem überein, was darunter steht.
 
 Der Zähler `n frames · m projects` zählt weiterhin Frames, nicht Zeilen.
 
