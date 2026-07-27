@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -105,16 +106,176 @@ func TestPanelStaysInsideNarrowWidths(t *testing.T) {
 
 // TestFooterShowsHintsOrError: the error replaces the hints, it does not append.
 func TestFooterShowsHintsOrError(t *testing.T) {
-	hints := renderFooter(80, []string{"j/k bewegen"}, "")
+	hints := renderFooter(80, [][]string{{"j/k bewegen"}}, "")
 	if !strings.Contains(hints, "j/k bewegen") {
 		t.Errorf("footer lost its hints: %q", hints)
 	}
-	failed := renderFooter(80, []string{"j/k bewegen"}, "Speichern fehlgeschlagen")
+	failed := renderFooter(80, [][]string{{"j/k bewegen"}}, "Speichern fehlgeschlagen")
 	if !strings.Contains(failed, "Speichern fehlgeschlagen") {
 		t.Errorf("footer lost the error: %q", failed)
 	}
 	if strings.Contains(failed, "j/k bewegen") {
 		t.Errorf("error must replace the hints, got %q", failed)
+	}
+}
+
+// TestFooterRendersOneLinePerGroup: two groups, two lines.
+func TestFooterRendersOneLinePerGroup(t *testing.T) {
+	groups := [][]string{{"j/k bewegen", "[ ] Zeitraum"}, {"? hilfe", "q ende"}}
+	out := renderFooter(100, groups, "")
+	lines := strings.Split(out, "\n")
+	if len(lines) != 2 {
+		t.Fatalf("got %d lines, want 2: %q", len(lines), out)
+	}
+	if !strings.Contains(lines[0], "[ ] Zeitraum") || !strings.Contains(lines[1], "q ende") {
+		t.Errorf("groups landed on the wrong lines: %q", out)
+	}
+}
+
+// TestFooterMergesGroupsWhenOnlyOneLineFits: the period keys and the two exits
+// survive; that is the whole point of the change.
+func TestFooterMergesGroupsWhenOnlyOneLineFits(t *testing.T) {
+	groups := [][]string{{"j/k bewegen", "[ ] Zeitraum"}, {"? hilfe", "q ende", "n neu", "d löschen"}}
+	out := renderFooter(60, groups[:1], "") // caller passes what fits
+	if strings.Contains(out, "\n") {
+		t.Errorf("single group must be one line: %q", out)
+	}
+	merged := renderFooter(60, [][]string{mergeHints(groups)}, "")
+	for _, want := range []string{"[ ] Zeitraum", "? hilfe", "q ende"} {
+		if !strings.Contains(merged, want) {
+			t.Errorf("merged footer at 60 lost %q: %q", want, merged)
+		}
+	}
+}
+
+// TestMergedHintsKeepThePeriodAndTheExits: the merge is not reading order. The
+// navigation group ends in "t/w/m/a Tag/Woche/Monat/alles", 29 columns, and
+// poured in as it stands it pushes "? hilfe" and "q ende" off an 80-column line
+// — the two keys one cannot look up once they are gone. The real hints, at the
+// widths a short terminal actually has.
+func TestMergedHintsKeepThePeriodAndTheExits(t *testing.T) {
+	merged := [][]string{mergeHints(footerHints(modeList))}
+	for _, c := range []struct {
+		width int
+		wants []string
+	}{
+		{60, []string{"[ ]", "? hilfe"}}, // 58 columns: q ende no longer fits
+		{80, []string{"[ ]", "? hilfe", "q ende"}},
+		{100, []string{"[ ]", "? hilfe", "q ende"}},
+	} {
+		out := renderFooter(c.width, merged, "")
+		if strings.Contains(out, "\n") {
+			t.Errorf("width %d: the merged hints are one line: %q", c.width, out)
+		}
+		for _, want := range c.wants {
+			if !strings.Contains(out, want) {
+				t.Errorf("width %d: merged footer lost %q: %q", c.width, want, out)
+			}
+		}
+	}
+	// Nothing is dropped by the merge itself — shedHints decides what fits.
+	var n int
+	for _, g := range footerHints(modeList) {
+		n += len(g)
+	}
+	if got := len(mergeHints(footerHints(modeList))); got != n {
+		t.Errorf("merge kept %d of %d hints; it may reorder, not drop", got, n)
+	}
+}
+
+// TestFooterErrorStillReplacesEverything.
+func TestFooterErrorStillReplacesEverything(t *testing.T) {
+	groups := [][]string{{"j/k bewegen"}, {"q ende"}}
+	out := renderFooter(80, groups, "Speichern fehlgeschlagen")
+	if !strings.Contains(out, "Speichern fehlgeschlagen") {
+		t.Errorf("error missing: %q", out)
+	}
+	if strings.Contains(out, "j/k") || strings.Contains(out, "q ende") {
+		t.Errorf("error must replace the hints: %q", out)
+	}
+	if strings.Contains(out, "\n") {
+		t.Errorf("error is one line: %q", out)
+	}
+}
+
+// TestFooterHintsListPeriodKeys: the gap that started this change.
+func TestFooterHintsListPeriodKeys(t *testing.T) {
+	groups := footerHints(modeList)
+	if len(groups) != 2 {
+		t.Fatalf("list hints must come in two groups, got %d", len(groups))
+	}
+	flat := strings.Join(append(append([]string{}, groups[0]...), groups[1]...), " ")
+	for _, want := range []string{"[ ]", "t/w/m/a", "? hilfe", "q ende"} {
+		if !strings.Contains(flat, want) {
+			t.Errorf("list hints missing %q: %q", want, flat)
+		}
+	}
+	// Group 1 is navigation and period, group 2 actions and views.
+	if !strings.Contains(strings.Join(groups[0], " "), "[ ]") {
+		t.Errorf("period keys belong in the first group: %q", groups[0])
+	}
+}
+
+// TestFooterKeepsPeriodAndExitsAt80: shedding must not eat the keys a user
+// cannot otherwise find.
+func TestFooterKeepsPeriodAndExitsAt80(t *testing.T) {
+	groups := footerHints(modeList)
+	first := renderFooter(80, groups[:1], "")
+	if !strings.Contains(first, "[ ]") {
+		t.Errorf("period hint gone at 80 columns: %q", first)
+	}
+	second := renderFooter(80, groups[1:], "")
+	for _, want := range []string{"? hilfe", "q ende"} {
+		if !strings.Contains(second, want) {
+			t.Errorf("exit hint %q gone at 80 columns: %q", want, second)
+		}
+	}
+}
+
+// TestFooterMeasuresBeforeStyling: colour must not change which hints survive.
+// shedHints measures the plain hint and styles only what it keeps; measuring a
+// styled one is harmless as long as the measure steps over escape sequences,
+// which lipgloss.Width does — but swap it for one that counts runes or bytes
+// and the escapes become columns, and the footer silently sheds hints that fit.
+// That is the trap panel fell into with its body lines. Under go test the
+// renderer strips colour, so the profile has to be forced on or there is
+// nothing here to measure.
+func TestFooterMeasuresBeforeStyling(t *testing.T) {
+	count := func(out string) int {
+		n := 0
+		for _, line := range strings.Split(out, "\n") {
+			if body := strings.TrimSpace(line); body != "" {
+				n += len(strings.Split(body, hintSep))
+			}
+		}
+		return n
+	}
+	groups := footerHints(modeList)
+	widths := []int{40, 60, 80, 100, 140}
+	plain := make(map[int]int, len(widths))
+	for _, width := range widths {
+		plain[width] = count(renderFooter(width, groups, ""))
+	}
+
+	// 0 is termenv.TrueColor; see TestFatalPanelIsErrorColoured for why it is
+	// written as a number. Restored by defer, and the profile is set once
+	// outside the loop: it is global, so a panic in between would leave every
+	// later test comparing against coloured strings.
+	saved := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(0)
+	defer lipgloss.SetColorProfile(saved)
+
+	for _, width := range widths {
+		out := renderFooter(width, groups, "")
+		if got := count(out); got != plain[width] {
+			t.Errorf("width %d: %d hints in colour, %d without — the escapes were "+
+				"measured as columns: %q", width, got, plain[width], out)
+		}
+		for i, line := range strings.Split(out, "\n") {
+			if w := lipgloss.Width(line); w > width {
+				t.Errorf("width %d: coloured line %d is %d wide: %q", width, i, w, line)
+			}
+		}
 	}
 }
 
@@ -143,7 +304,11 @@ func TestFooterHintsPerMode(t *testing.T) {
 		modeFatal:         {"beendet"},
 	}
 	for m, wants := range cases {
-		got := strings.Join(footerHints(m), hintSep)
+		var flat []string
+		for _, g := range footerHints(m) {
+			flat = append(flat, g...)
+		}
+		got := strings.Join(flat, hintSep)
 		if got == "" {
 			t.Errorf("mode %d has no hints", m)
 			continue
@@ -156,13 +321,50 @@ func TestFooterHintsPerMode(t *testing.T) {
 	}
 }
 
-// TestChromeHeightCollapses: the chrome must not eat the list on short
-// terminals, so it sheds the header in two steps.
-func TestChromeHeightCollapses(t *testing.T) {
-	cases := map[int]int{30: 5, 20: 5, 19: 2, 12: 2, 11: 1, 5: 1}
+// TestChromeHeightStages: the chrome sheds in four steps so the body keeps room.
+func TestChromeHeightStages(t *testing.T) {
+	cases := map[int]int{40: 8, 24: 8, 23: 6, 20: 6, 19: 2, 14: 2, 13: 1, 5: 1}
 	for height, want := range cases {
 		if got := chromeHeight(height); got != want {
 			t.Errorf("chromeHeight(%d) = %d, want %d", height, got, want)
+		}
+	}
+}
+
+// TestHeaderRowBudgetStages: the comparison row is the first thing to go.
+func TestHeaderRowBudgetStages(t *testing.T) {
+	cases := map[int]int{40: 4, 24: 4, 23: 3, 20: 3, 19: 1, 14: 1, 13: 0, 5: 0}
+	for height, want := range cases {
+		if got := headerRowBudget(height); got != want {
+			t.Errorf("headerRowBudget(%d) = %d, want %d", height, got, want)
+		}
+	}
+}
+
+// TestChromeStagesAddUp: the three numbers are one budget seen from three
+// sides. The framed header draws its rows plus two border lines, the footer
+// draws its lines, and together they have to be exactly what chromeHeight
+// reserves — App.View hands the body everything else, so a disagreement is a
+// blank row at the bottom of the screen or a line pushed off the top.
+func TestChromeStagesAddUp(t *testing.T) {
+	for height := 2; height <= 40; height++ {
+		header := headerRowBudget(height)
+		if header > 0 && height >= chromeSlimMinHeight {
+			header += 2 // the frame
+		}
+		if got := header + footerLines(height); got != chromeHeight(height) {
+			t.Errorf("height %d: header %d + footer %d = %d, but chromeHeight says %d",
+				height, header, footerLines(height), got, chromeHeight(height))
+		}
+	}
+}
+
+// TestFooterLinesStages: two hint lines only where the height pays for them.
+func TestFooterLinesStages(t *testing.T) {
+	cases := map[int]int{40: 2, 24: 2, 23: 1, 14: 1, 13: 1, 1: 1}
+	for height, want := range cases {
+		if got := footerLines(height); got != want {
+			t.Errorf("footerLines(%d) = %d, want %d", height, got, want)
 		}
 	}
 }
@@ -208,20 +410,62 @@ func TestSpreadFillsTheLineAndKeepsBothFields(t *testing.T) {
 }
 
 // TestHeaderShowsFieldsFramed: at full height the header is framed, carries the
-// version and every field label and value.
+// version and every field label and value. Four field rows plus the two border
+// lines are the six the chrome budgets for it from height 24 up.
 func TestHeaderShowsFieldsFramed(t *testing.T) {
 	rows := [][]headerField{
-		{{"Zeitraum", "Woche 20.07.–26.07."}, {"Frames", "12"}},
-		{{"Filter", "—"}, {"", "▶ schnaq 1:23:45"}},
+		{{"Zeitraum", "Woche 20.07.–26.07."}, {"Summe", "12h 30m"}},
+		{{"Vorwoche", "8h 00m"}, {"Monat", "40h 15m"}},
+		{{"Filter", "—"}, {"", "3 Frames · 2 Projekte"}},
+		{{}, {"", "▶ schnaq 1:23:45"}},
 	}
-	out := renderHeader(100, 30, "0.1.0", rows)
-	for _, want := range []string{"watson-tui", "0.1.0", "Zeitraum", "Woche 20.07.–26.07.", "Frames", "12", "Filter", "▶ schnaq 1:23:45"} {
+	out := renderHeader(100, 24, "0.1.0", rows)
+	for _, want := range []string{"watson-tui", "0.1.0", "Zeitraum", "Woche 20.07.–26.07.",
+		"Summe", "12h 30m", "Vorwoche", "Filter", "▶ schnaq 1:23:45"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("framed header missing %q:\n%s", want, out)
 		}
 	}
-	if lines := strings.Count(out, "\n") + 1; lines != 4 {
-		t.Errorf("framed header has %d lines, want 4:\n%s", lines, out)
+	if lines := strings.Count(out, "\n") + 1; lines != 6 {
+		t.Errorf("framed header has %d lines, want 6:\n%s", lines, out)
+	}
+}
+
+// TestHeaderFillsItsRowBudget: the framed header occupies exactly the lines
+// chromeHeight reserves, whatever the mode hands it. Modes differ in how much
+// context they have — the form has one field row, the list four — and View
+// gives the body everything the chrome does not take, so a header that
+// shrink-wraps its rows leaves blank rows at the bottom of the screen.
+//
+// Rows are added and removed just before the last one, because the last row is
+// the running timer in every mode and the spec puts it bottom right.
+func TestHeaderFillsItsRowBudget(t *testing.T) {
+	const timer = "▶ schnaq 1:23:45"
+	for _, height := range []int{30, 24, 23, 20} {
+		budget := headerRowBudget(height)
+		for _, n := range []int{1, 2, 3, 4, 5, 6} {
+			rows := make([][]headerField, n)
+			for i := range rows {
+				rows[i] = []headerField{{"Feld", fmt.Sprintf("wert %d", i)}}
+			}
+			rows[n-1] = []headerField{{}, {"", timer}}
+
+			out := renderHeader(100, height, "0.1.0", rows)
+			if lines := strings.Count(out, "\n") + 1; lines != budget+2 {
+				t.Errorf("height %d with %d rows: header has %d lines, want %d:\n%s",
+					height, n, lines, budget+2, out)
+			}
+			if !strings.Contains(out, timer) {
+				t.Errorf("height %d with %d rows: the timer row must survive:\n%s",
+					height, n, out)
+			}
+			// It survives as the last row, not merely somewhere.
+			lines := strings.Split(out, "\n")
+			if last := lines[len(lines)-2]; !strings.Contains(last, timer) {
+				t.Errorf("height %d with %d rows: timer is not on the last row: %q",
+					height, n, last)
+			}
+		}
 	}
 }
 
@@ -347,29 +591,33 @@ func TestSpreadKeepsTheRightFieldRight(t *testing.T) {
 // terminal some have to go. They go from the tail and they go whole — a footer
 // ending in "q en" or a dangling separator is worse than one hint fewer.
 func TestFooterShedsWholeHints(t *testing.T) {
-	hints := footerHints(modeList)
+	groups := footerHints(modeList)
 	whole := map[string]bool{}
-	for _, h := range hints {
-		whole[h] = true
+	for _, g := range groups {
+		for _, h := range g {
+			whole[h] = true
+		}
 	}
 	for width := 0; width <= 140; width++ {
-		out := renderFooter(width, hints, "")
+		out := renderFooter(width, groups, "")
 		if w := lipgloss.Width(out); w > width {
 			t.Errorf("width %d: footer is %d wide: %q", width, w, out)
 		}
-		body := strings.TrimSpace(out)
-		if body == "" {
-			continue
-		}
-		if strings.Contains(body, "…") {
-			t.Errorf("width %d: a hint was cut instead of dropped: %q", width, out)
-		}
-		if strings.HasPrefix(body, "·") || strings.HasSuffix(body, "·") {
-			t.Errorf("width %d: dangling separator: %q", width, out)
-		}
-		for _, part := range strings.Split(body, hintSep) {
-			if !whole[part] {
-				t.Errorf("width %d: %q is not a whole hint of %v", width, part, hints)
+		for _, line := range strings.Split(out, "\n") {
+			body := strings.TrimSpace(line)
+			if body == "" {
+				continue
+			}
+			if strings.Contains(body, "…") {
+				t.Errorf("width %d: a hint was cut instead of dropped: %q", width, line)
+			}
+			if strings.HasPrefix(body, "·") || strings.HasSuffix(body, "·") {
+				t.Errorf("width %d: dangling separator: %q", width, line)
+			}
+			for _, part := range strings.Split(body, hintSep) {
+				if !whole[part] {
+					t.Errorf("width %d: %q is not a whole hint of %v", width, part, groups)
+				}
 			}
 		}
 	}

@@ -40,11 +40,15 @@ laden (`linux_amd64` oder `linux_arm64`) und `watson-tui` in den `PATH` legen.
 | `q` | beenden |
 
 Die Oberfläche nutzt die ANSI-Farben deines Terminal-Themes: Kontext-Header
-oben, gerahmtes Hauptpanel, Tastenhinweise unten. Ab 20 Terminalzeilen ist der
-Header gerahmt, zwischen 12 und 19 Zeilen klappt er auf eine Zeile ein, unter 12
-verschwindet er — die Liste behält den Platz. Passen nicht alle Tastenhinweise in
-die Breite, fallen die hinteren ganz weg statt mitten im Wort zu enden; `?` zeigt
-immer die vollständige Belegung.
+oben, gerahmtes Hauptpanel, Tastenhinweise unten. Das Chrome gibt seinen Platz
+in vier Stufen an die Liste zurück: ab 24 Terminalzeilen ist der Header gerahmt
+und zeigt vier Feldzeilen über zwei Hinweiszeilen, zwischen 20 und 23 Zeilen
+bleibt er gerahmt mit drei Feldzeilen und einer Hinweiszeile, zwischen 14 und 19
+klappt er auf eine Zeile ein, unter 14 verschwindet er ganz. Passen nicht alle
+Tastenhinweise in die Breite, fallen die hinteren ganz weg statt mitten im Wort
+zu enden; bleibt nur eine Hinweiszeile, rücken die Zeitraum-Tasten und die
+beiden Ausgänge `?` und `q` in sie zusammen. `?` zeigt immer die vollständige
+Belegung.
 
 Auch die Frameliste richtet sich nach der Breite, und zwar in dieser Reihenfolge:
 ab etwa 88 Spalten schrumpfen die Tags (mit `…`), unter etwa 60 sind sie weg und

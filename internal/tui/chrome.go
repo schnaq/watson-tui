@@ -61,9 +61,9 @@ func panel(title, body string, width int, border lipgloss.Style) string {
 	return b.String()
 }
 
-// renderFooter draws the key hints. An error replaces them: a failed write is
-// more urgent than a reminder of which key moves the cursor.
-func renderFooter(width int, hints []string, errMsg string) string {
+// renderFooter draws the key hints, one line per group. An error replaces them
+// all: a failed write outranks a reminder of which key moves the cursor.
+func renderFooter(width int, groups [][]string, errMsg string) string {
 	avail := width - 2 // one leading space, one column of margin on the right
 	if avail < 1 {
 		return ""
@@ -73,18 +73,31 @@ func renderFooter(width int, hints []string, errMsg string) string {
 		// failed. The ellipsis truncate leaves marks that there is more.
 		return " " + styleError.Render(truncate(errMsg, avail))
 	}
-	return " " + styleDim.Render(fitHints(hints, avail))
+	lines := make([]string, 0, len(groups))
+	for _, g := range groups {
+		lines = append(lines, " "+shedHints(g, avail))
+	}
+	return strings.Join(lines, "\n")
 }
 
 // hintSep separates two key hints in the footer.
 const hintSep = " · "
 
-// fitHints joins the hints that fit avail columns and drops the rest from the
+// shedHints joins the hints that fit avail columns and drops the rest from the
 // tail. Whole hints only: the list mode alone needs 116 columns, so on any
 // normal terminal something has to go, and a footer ending in "q en" reads as a
 // key that does not exist. Callers order their hints by how badly the user needs
 // them, so what goes is what the help screen can still teach.
-func fitHints(hints []string, avail int) string {
+//
+// Every hint is measured plain and styled only once it is kept. lipgloss.Width
+// does step over escape sequences, so that order is not what makes the
+// arithmetic come out today — it is what keeps it coming out: a measure that
+// counts runes or bytes (truncate, len) is one edit away, and on a styled hint
+// it would read the escapes as columns and shed hints that fit. panel was
+// bitten by exactly that. TestFooterMeasuresBeforeStyling forces a colour
+// profile and pins it, because under go test the renderer strips colour and
+// there would be nothing to measure.
+func shedHints(hints []string, avail int) string {
 	var kept []string
 	used := 0
 	for _, h := range hints {
@@ -96,37 +109,77 @@ func fitHints(hints []string, avail int) string {
 			break
 		}
 		used += w
-		kept = append(kept, h)
+		kept = append(kept, styleHint(h))
 	}
 	return strings.Join(kept, hintSep)
 }
 
-// footerHints lists the keys that work in the given mode, most important first
-// — renderFooter drops from the tail. Help and quit come before the keys the
-// help screen still lists, because they are the two the user cannot look up any
-// other way once they are gone.
-func footerHints(m mode) []string {
+// styleHint sets the key off from what it does: "j/k" in the accent colour,
+// "bewegen" dimmed. Two shades in a line of ten hints are what let the eye find
+// the key it is looking for instead of reading the line.
+func styleHint(h string) string {
+	if i := strings.IndexByte(h, ' '); i > 0 {
+		return styleKey.Render(h[:i]) + styleDim.Render(h[i:])
+	}
+	return styleKey.Render(h)
+}
+
+// mergeHints pours the groups into a single line, for a terminal too short to
+// give each of them one. Not in reading order: the first group ends in
+// "t/w/m/a Tag/Woche/Monat/alles", twenty-nine columns, and poured in as it
+// stands it pushes "? hilfe" and "q ende" off an 80-column line — the two keys
+// nobody can look up once they are gone. So the first group keeps its two
+// leading hints ahead of the rest and its tail goes last. Nothing is dropped
+// here; shedHints decides what fits.
+func mergeHints(groups [][]string) []string {
+	if len(groups) == 0 {
+		return nil
+	}
+	const lead = 2 // "j/k bewegen" and "[ ] Zeitraum"
+	head, tail := groups[0], []string(nil)
+	if len(head) > lead {
+		head, tail = head[:lead], head[lead:]
+	}
+	merged := append([]string{}, head...)
+	for _, g := range groups[1:] {
+		merged = append(merged, g...)
+	}
+	return append(merged, tail...)
+}
+
+// footerHints lists the keys that work in the given mode, in groups of one line
+// each, most important first — shedHints drops from the tail of every group.
+// Only the list has enough keys to need two lines; the other modes keep one.
+func footerHints(m mode) [][]string {
 	switch m {
 	case modeForm:
-		return []string{"tab Feld", "→ Vorschlag", "enter speichern", "esc abbrechen"}
+		return [][]string{{"tab Feld", "→ Vorschlag", "enter speichern", "esc abbrechen"}}
 	case modeReport:
-		return []string{"t/w/m Zeitraum", "[ ] verschieben", "esc zurück"}
+		return [][]string{{"t/w/m Zeitraum", "[ ] verschieben", "esc zurück"}}
 	case modeOverview:
-		return []string{"esc zurück"}
+		return [][]string{{"esc zurück"}}
 	case modeStartTimer:
-		return []string{"tab Feld", "→ Vorschlag", "enter starten", "esc abbrechen"}
+		return [][]string{{"tab Feld", "→ Vorschlag", "enter starten", "esc abbrechen"}}
 	case modeConfirmDelete:
-		return []string{"y löschen", "andere Taste abbrechen"}
+		return [][]string{{"y löschen", "andere Taste abbrechen"}}
 	case modeConfirmCancel:
-		return []string{"y verwerfen", "andere Taste abbrechen"}
+		return [][]string{{"y verwerfen", "andere Taste abbrechen"}}
 	case modeHelp:
-		return []string{"beliebige Taste schließt die Hilfe"}
+		return [][]string{{"beliebige Taste schließt die Hilfe"}}
 	case modeFatal:
-		return []string{"beliebige Taste beendet watson-tui"}
+		return [][]string{{"beliebige Taste beendet watson-tui"}}
 	default:
-		return []string{
-			"j/k bewegen", "enter bearbeiten", "? hilfe", "q ende", "n neu",
-			"d löschen", "s timer", "/ filtern", "r report", "o übersicht",
+		// Navigation and period on the first line, actions and views on the
+		// second. "[ ] Zeitraum" and "t/w/m/a" are why this change exists: the
+		// period read as a state because no hint ever said it could be moved.
+		//
+		// "? hilfe" and "q ende" sit third and fourth in the second group on
+		// purpose. About six hints of it survive at 80 columns, and these two
+		// are the ones there is no way left to look up once they are gone.
+		return [][]string{
+			{"j/k bewegen", "[ ] Zeitraum", "t/w/m/a Tag/Woche/Monat/alles"},
+			{"enter edit", "n neu", "? hilfe", "q ende", "d löschen", "s timer",
+				"/ filter", "r report", "o übersicht", "R neu laden"},
 		}
 	}
 }
@@ -138,23 +191,56 @@ type headerField struct {
 }
 
 // Collapse thresholds. The chrome must never grow so tall that the list it
-// frames has no room left.
+// frames has no room left. With the context header and the second hint line it
+// stands at eight lines, so it sheds in four steps rather than two: first the
+// comparison row and the second hint line, then the frame around the header,
+// then the header itself.
 const (
-	headerFullMinHeight = 20 // framed header (4 lines) + footer
-	headerLineMinHeight = 12 // single-line header + footer
+	chromeFullMinHeight = 24 // framed header, 4 field rows, 2 hint lines
+	chromeSlimMinHeight = 20 // framed header, 3 field rows, 1 hint line
+	headerLineMinHeight = 14 // single unframed header line, 1 hint line
 )
 
 // chromeHeight reports how many lines the chrome occupies at this terminal
-// height, so App.View can hand the rest to the body.
+// height, so App.View can hand the rest to the body. It is a promise, not an
+// estimate: headerRowBudget and footerLines add up to exactly this, and the
+// header and the footer fill their share whatever the mode has to say.
 func chromeHeight(height int) int {
 	switch {
-	case height >= headerFullMinHeight:
-		return 5
+	case height >= chromeFullMinHeight:
+		return 8
+	case height >= chromeSlimMinHeight:
+		return 6
 	case height >= headerLineMinHeight:
 		return 2
 	default:
 		return 1
 	}
+}
+
+// headerRowBudget reports how many field rows the header shows. The comparison
+// row is the first to go: it is the one field a user can work without.
+func headerRowBudget(height int) int {
+	switch {
+	case height >= chromeFullMinHeight:
+		return 4
+	case height >= chromeSlimMinHeight:
+		return 3
+	case height >= headerLineMinHeight:
+		return 1
+	default:
+		return 0
+	}
+}
+
+// footerLines reports how many hint lines fit. Two is what it takes to show the
+// period keys next to the actions; below that the caller pours both groups into
+// the one line it has (see mergeHints).
+func footerLines(height int) int {
+	if height >= chromeFullMinHeight {
+		return 2
+	}
+	return 1
 }
 
 // renderField formats "label  value"; a field without a label is just its value.
@@ -258,14 +344,41 @@ func fitBody(body string, maxLines, maxWidth int) string {
 	return strings.Join(lines, "\n")
 }
 
-// renderHeader draws the context panel. Above headerFullMinHeight it is framed
-// and shows every row; between the thresholds it collapses to a single
-// unframed line carrying the outermost values; below, it disappears.
+// fitHeaderRows makes rows exactly budget long, so the framed header fills the
+// lines chromeHeight reserved for it. Modes differ in how much context they
+// have — the list four rows, the form one — and View gives the body every line
+// the chrome does not take, so a header that shrink-wraps its rows would leave
+// blank rows at the bottom of the screen and the count would depend on the mode.
+//
+// Rows are added and taken away just before the last one, because the last row
+// is the running timer in every mode and the spec puts it bottom right. The
+// caller decides which row above it gives way (the comparison row does); this
+// is only the hard guarantee that the count holds either way.
+func fitHeaderRows(rows [][]headerField, budget int) [][]headerField {
+	if budget < 1 {
+		return nil
+	}
+	if len(rows) == 0 {
+		return make([][]headerField, budget)
+	}
+	last := rows[len(rows)-1]
+	fitted := make([][]headerField, budget)
+	for i := 0; i < budget-1 && i < len(rows)-1; i++ {
+		fitted[i] = rows[i]
+	}
+	fitted[budget-1] = last
+	return fitted
+}
+
+// renderHeader draws the context panel. From chromeSlimMinHeight up it is
+// framed and shows as many rows as headerRowBudget allows; between the
+// thresholds it collapses to a single unframed line carrying the outermost
+// values; below, it disappears.
 func renderHeader(width, height int, version string, rows [][]headerField) string {
 	switch {
-	case height >= headerFullMinHeight:
+	case height >= chromeSlimMinHeight:
 		var lines []string
-		for _, r := range rows {
+		for _, r := range fitHeaderRows(rows, headerRowBudget(height)) {
 			var left, right string
 			if len(r) > 0 {
 				left = renderField(r[0])

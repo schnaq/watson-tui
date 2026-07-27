@@ -18,9 +18,12 @@ var chromeModes = []mode{
 }
 
 // chromeHeights are the terminal heights the arithmetic has to hold at: the
-// three header branches (framed, one line, gone), both of their boundaries, and
-// the short terminals where the panel border no longer fits at all.
-var chromeHeights = []int{30, 20, 19, 15, 12, 11, 10, 5, 3, 2}
+// four collapse stages, both sides of each of their three boundaries, and the
+// short terminals where the panel border no longer fits at all. The boundaries
+// are the whole point of the list — the stages are exactly where header rows
+// and hint lines are added and taken away, so a sweep that skips them checks
+// the design nowhere near where it changes.
+var chromeHeights = []int{30, 24, 23, 20, 19, 15, 14, 13, 11, 10, 5, 3, 2}
 
 // chromeWidths bracket the narrow terminal where the billing table no longer
 // fits its own minimum column widths (60) and the comfortable one (100).
@@ -112,36 +115,55 @@ func TestViewBudgetsHeight(t *testing.T) {
 	}
 }
 
-// TestViewHeaderRowsMatchChromeBudget: chromeHeight reserves four lines for the
-// framed header, so every mode has to fill exactly those. A mode with a single
-// field row draws a three-line header, which leaves the body a line it never
-// uses and the footer floating one row above the bottom.
-func TestViewHeaderRowsMatchChromeBudget(t *testing.T) {
+// TestViewChromeFillsItsBudget: header and footer together have to occupy
+// exactly the lines chromeHeight reserves — in every mode and at every stage.
+// View hands the body everything else, so a chrome that draws one line less
+// than it claimed leaves a blank row at the bottom of the terminal, and one
+// that draws more pushes the top line off the screen.
+//
+// The modes differ in how much they have to say: the list fills four header
+// rows and two hint lines, the form one row and one line. Neither may decide
+// the layout — filling the budget is the chrome's job, not the mode's.
+func TestViewChromeFillsItsBudget(t *testing.T) {
 	now := time.Now()
 	frames := []watson.Frame{
 		mkFrame("a1111111111111111111111111111111", "alpha", now.Add(-2*time.Hour), time.Hour),
 	}
-	const height = 30
-	want := chromeHeight(height) - 1 // the footer takes the remaining line
-	for _, m := range chromeModes {
-		app := chromeApp(t, now, 100, height, frames)
-		app.mode = m
-		rows := app.headerFields()
-		if len(rows) != 2 {
-			t.Errorf("mode %d has %d header rows, want 2", m, len(rows))
+	countLines := func(s string) int {
+		if s == "" {
+			return 0 // View leaves out an empty header rather than drawing a blank line
 		}
-		out := renderHeader(100, height, app.version, rows)
-		if lines := strings.Count(out, "\n") + 1; lines != want {
-			t.Errorf("mode %d: framed header has %d lines, chromeHeight reserves %d:\n%s",
-				m, lines, want, out)
+		return strings.Count(s, "\n") + 1
+	}
+	for _, height := range chromeHeights {
+		for _, m := range chromeModes {
+			app := chromeApp(t, now, 100, height, frames)
+			app.mode = m
+			header, footer := countLines(app.headerView()), countLines(app.footerView())
+			if header+footer != chromeHeight(height) {
+				t.Errorf("mode %d at height %d: header %d + footer %d lines, "+
+					"chromeHeight reserves %d", m, height, header, footer, chromeHeight(height))
+			}
+			if footer != footerLines(height) {
+				t.Errorf("mode %d at height %d: footer has %d lines, want %d",
+					m, height, footer, footerLines(height))
+			}
+			// The hints sit on the last row of the terminal, not one above it:
+			// the modes with a single hint group are padded to their share of
+			// the chrome, and padding below the hints would float them.
+			lines := strings.Split(app.View(), "\n")
+			if last := lines[len(lines)-1]; strings.TrimSpace(last) == "" {
+				t.Errorf("mode %d at height %d: the bottom row is blank, the hints "+
+					"float above it: %q", m, height, strings.Join(lines[len(lines)-2:], "\n"))
+			}
 		}
 	}
 }
 
 // TestViewShedsHeaderOnShortTerminals: the collapse thresholds have to be
-// visible in the assembled frame, not just in renderHeader. Between 12 and 19
+// visible in the assembled frame, not just in renderHeader. Between 14 and 19
 // lines the header keeps the context but loses its frame and the version title;
-// below 12 every line belongs to the body and the header is gone entirely. The
+// below 14 every line belongs to the body and the header is gone entirely. The
 // footer stays in both cases — it is the only thing left that names the keys.
 func TestViewShedsHeaderOnShortTerminals(t *testing.T) {
 	now := time.Now()
@@ -249,7 +271,7 @@ func TestViewKeepsTimerBottomRight(t *testing.T) {
 
 		// Only the header rows: the report and the overview bodies disclose the
 		// running timer as well, and those notes are left-aligned on purpose.
-		lines := strings.Split(app.View(), "\n")[:chromeHeight(height)-1]
+		lines := strings.Split(app.View(), "\n")[:chromeHeight(height)-footerLines(height)]
 		var found bool
 		for _, line := range lines {
 			if !strings.Contains(line, timer) {

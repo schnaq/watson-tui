@@ -1,5 +1,7 @@
 ╭─ watson-tui 0.1.0 ───────────────────────────────────────────────────────────────────────────────╮
 │ Zeitraum  alle Frames                                                                  Frames  3 │
+│                                                                                                  │
+│                                                                                                  │
 │ Filter  —                                                                             kein Timer │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Frames ─────────────────────────────────────────────────────────────────────────────────────────╮
@@ -23,8 +25,6 @@
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
-│                                                                                                  │
-│                                                                                                  │
-│                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
- j/k bewegen · enter bearbeiten · ? hilfe · q ende · n neu · d löschen · s timer · / filtern
+ j/k bewegen · [ ] Zeitraum · t/w/m/a Tag/Woche/Monat/alles
+ enter edit · n neu · ? hilfe · q ende · d löschen · s timer · / filter · r report · o übersicht

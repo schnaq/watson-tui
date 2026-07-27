@@ -523,7 +523,7 @@ func (a *App) View() string {
 	body = fitBody(body, content, bodyWidth)
 
 	var parts []string
-	if header := renderHeader(a.width, a.height, a.version, a.headerFields()); header != "" {
+	if header := a.headerView(); header != "" {
 		parts = append(parts, header)
 	}
 	if framed {
@@ -531,8 +531,42 @@ func (a *App) View() string {
 	} else {
 		parts = append(parts, body)
 	}
-	parts = append(parts, renderFooter(a.width, footerHints(a.mode), a.errMsg))
+	parts = append(parts, a.footerView())
 	return strings.Join(parts, "\n")
+}
+
+// headerView draws the context panel for the active mode. Together with
+// footerView it occupies exactly chromeHeight(a.height) lines, which is what
+// View's body arithmetic above is built on.
+func (a *App) headerView() string {
+	return renderHeader(a.width, a.height, a.version, a.headerFields())
+}
+
+// footerView draws the key hints, one line per group — but only as many groups
+// as the terminal has lines for. When it has one, the groups are poured into it
+// rather than the second one being dropped: the second group is where ? and q
+// live, and losing them is losing the last place the keys are named.
+//
+// The lines are padded to the footer's share of the chrome, above the hints and
+// not below them: a mode with a single group, or an error, would otherwise
+// leave the frame one line short of the bottom of the terminal and the hints
+// floating a row above it — the unfinished look fitBody was taught to avoid.
+// Padding at all is what keeps the body panel from jumping a row when the mode
+// changes.
+func (a *App) footerView() string {
+	groups := footerHints(a.mode)
+	if n := footerLines(a.height); len(groups) > n {
+		if n == 1 {
+			groups = [][]string{mergeHints(groups)}
+		} else {
+			groups = groups[:n]
+		}
+	}
+	footer := renderFooter(a.width, groups, a.errMsg)
+	if n, have := footerLines(a.height), strings.Count(footer, "\n")+1; have < n {
+		footer = strings.Repeat("\n", n-have) + footer
+	}
+	return footer
 }
 
 func helpView() string {

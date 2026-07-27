@@ -211,7 +211,7 @@ func TestFormView(t *testing.T) {
 	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Frame neu") {
 		t.Errorf("header must name the new frame: %q", got)
 	}
-	if got := strings.Join(footerHints(modeForm), hintSep); !strings.Contains(got, "esc abbrechen") {
+	if got := renderFooter(100, footerHints(modeForm), ""); !strings.Contains(got, "esc abbrechen") {
 		t.Errorf("footer must carry the abort key: %q", got)
 	}
 	out := app.form.view()

@@ -32,4 +32,7 @@ var (
 	styleFocus       = lipgloss.NewStyle().Foreground(colFocus)
 	styleWarn        = lipgloss.NewStyle().Foreground(colWarn)
 	styleHeaderLabel = lipgloss.NewStyle().Foreground(colDim)
+	// styleKey sets a key off from its description in the footer, so "j/k" is
+	// findable in a line of ten hints without reading the line.
+	styleKey = lipgloss.NewStyle().Bold(true).Foreground(colAccent)
 )

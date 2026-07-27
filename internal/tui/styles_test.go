@@ -17,7 +17,7 @@ func TestThemeUsesANSIOnly(t *testing.T) {
 		"title": styleTitle, "dayHeader": styleDayHeader, "selected": styleSelected,
 		"dim": styleDim, "running": styleRunning, "error": styleError,
 		"border": styleBorder, "accent": styleAccent, "focus": styleFocus,
-		"warn": styleWarn, "headerLabel": styleHeaderLabel,
+		"warn": styleWarn, "headerLabel": styleHeaderLabel, "key": styleKey,
 	}
 	for name, s := range styles {
 		assertANSIColor(t, name+" fg", s.GetForeground())
