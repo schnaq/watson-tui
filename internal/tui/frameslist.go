@@ -14,6 +14,9 @@ type periodUnit int
 const (
 	unitWeek periodUnit = iota
 	unitMonth
+	// unitYear is not reachable by any key — it exists so a month can be
+	// compared against the year containing it; see comparisonPeriods.
+	unitYear
 	unitDay
 	unitAll
 )
@@ -38,6 +41,9 @@ func (p period) bounds(weekStart time.Weekday) (from, to time.Time, ok bool) {
 		diff := (int(day.Weekday()) - int(weekStart) + 7) % 7
 		start := day.AddDate(0, 0, -diff)
 		return start, start.AddDate(0, 0, 7), true
+	case unitYear:
+		start := time.Date(y, 1, 1, 0, 0, 0, 0, p.ref.Location())
+		return start, start.AddDate(1, 0, 0), true
 	default: // unitMonth
 		start := time.Date(y, m, 1, 0, 0, 0, 0, p.ref.Location())
 		return start, start.AddDate(0, 1, 0), true
@@ -56,6 +62,8 @@ func (p period) shift(weekStart time.Weekday, delta int) period {
 		p.ref = from.AddDate(0, 0, delta)
 	case unitWeek:
 		p.ref = from.AddDate(0, 0, 7*delta)
+	case unitYear:
+		p.ref = from.AddDate(delta, 0, 0)
 	default:
 		p.ref = from.AddDate(0, delta, 0)
 	}
@@ -88,6 +96,8 @@ func (p period) label(weekStart time.Weekday) string {
 		last := to.AddDate(0, 0, -1)
 		return fmt.Sprintf("Woche %02d.%02d. – %02d.%02d.%d",
 			from.Day(), int(from.Month()), last.Day(), int(last.Month()), last.Year())
+	case unitYear:
+		return fmt.Sprintf("Jahr %d", from.Year())
 	default:
 		return fmt.Sprintf("%s %d", germanMonths[int(from.Month())], from.Year())
 	}
