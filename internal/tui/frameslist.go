@@ -81,36 +81,37 @@ func (p period) shift(weekStart time.Weekday, delta int) period {
 	return p
 }
 
-var germanDays = map[time.Weekday]string{
-	time.Monday: "Montag", time.Tuesday: "Dienstag", time.Wednesday: "Mittwoch",
-	time.Thursday: "Donnerstag", time.Friday: "Freitag", time.Saturday: "Samstag",
-	time.Sunday: "Sonntag",
+var weekdayNames = map[time.Weekday]string{
+	time.Monday: "Monday", time.Tuesday: "Tuesday", time.Wednesday: "Wednesday",
+	time.Thursday: "Thursday", time.Friday: "Friday", time.Saturday: "Saturday",
+	time.Sunday: "Sunday",
 }
 
-var germanMonths = [...]string{"", "Januar", "Februar", "März", "April", "Mai", "Juni",
-	"Juli", "August", "September", "Oktober", "November", "Dezember"}
+var monthNames = [...]string{"", "January", "February", "March", "April", "May",
+	"June", "July", "August", "September", "October", "November", "December"}
 
+// formatDay renders a day header in ISO, so a date read off the screen can be
+// typed straight into the frame form, which expects the same layout.
 func formatDay(t time.Time) string {
-	return fmt.Sprintf("%s, %02d.%02d.%d", germanDays[t.Weekday()], t.Day(), int(t.Month()), t.Year())
+	return fmt.Sprintf("%s, %s", weekdayNames[t.Weekday()], t.Format("2006-01-02"))
 }
 
 // label describes the period for the status bar.
 func (p period) label(weekStart time.Weekday) string {
 	from, to, ok := p.bounds(weekStart)
 	if !ok {
-		return "alle Frames"
+		return "all frames"
 	}
 	switch p.unit {
 	case unitDay:
 		return formatDay(from)
 	case unitWeek:
 		last := to.AddDate(0, 0, -1)
-		return fmt.Sprintf("Woche %02d.%02d. – %02d.%02d.%d",
-			from.Day(), int(from.Month()), last.Day(), int(last.Month()), last.Year())
+		return fmt.Sprintf("Week %s – %s", from.Format("2006-01-02"), last.Format("2006-01-02"))
 	case unitYear:
-		return fmt.Sprintf("Jahr %d", from.Year())
-	default:
-		return fmt.Sprintf("%s %d", germanMonths[int(from.Month())], from.Year())
+		return fmt.Sprintf("Year %d", from.Year())
+	default: // unitMonth
+		return fmt.Sprintf("%s %d", monthNames[int(from.Month())], from.Year())
 	}
 }
 
@@ -244,7 +245,7 @@ type listModel struct {
 func newListModel(now time.Time, weekStart time.Weekday) listModel {
 	ti := textinput.New()
 	ti.Prompt = "/"
-	ti.Placeholder = "Projekt, Tag oder ID"
+	ti.Placeholder = "project, tag or ID"
 	return listModel{
 		per:         period{unit: unitWeek, ref: now}.shift(weekStart, 0),
 		cursor:      -1,
@@ -381,9 +382,9 @@ func (l *listModel) view(height, width int) string {
 		height = 1
 	}
 	if len(l.rows) == 0 {
-		empty := "keine Frames im Zeitraum — n legt einen neuen an"
+		empty := "no frames in this period — press n to add one"
 		if l.filter != "" {
-			empty = "kein Treffer für Filter »" + l.filter + "«"
+			empty = "no match for filter “" + l.filter + "”"
 		}
 		return styleDim.Render(empty)
 	}

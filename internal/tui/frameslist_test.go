@@ -15,7 +15,7 @@ func mkFrame(id, project string, start time.Time, dur time.Duration, tags ...str
 }
 
 func TestPeriodBoundsWeek(t *testing.T) {
-	// Mittwoch 2026-07-22, Wochenstart Montag → 20.07. bis (exkl.) 27.07.
+	// Wednesday 2026-07-22, week start Monday -> 2026-07-20 to (excl.) 2026-07-27
 	ref := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
 	from, to, ok := period{unit: unitWeek, ref: ref}.bounds(time.Monday)
 	if !ok || from.Day() != 20 || to.Day() != 27 {
@@ -27,7 +27,7 @@ func TestPeriodBoundsWeekSundayStart(t *testing.T) {
 	ref := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
 	from, _, _ := period{unit: unitWeek, ref: ref}.bounds(time.Sunday)
 	if from.Day() != 19 {
-		t.Errorf("from=%v, want 19.07.", from)
+		t.Errorf("from=%v, want 2026-07-19", from)
 	}
 }
 
@@ -56,7 +56,7 @@ func TestBuildRowsGroupsAndFilters(t *testing.T) {
 	}
 	p := period{unit: unitWeek, ref: day1}
 	rows := buildRows(frames, p, time.Monday, "")
-	if len(rows) != 5 { // 2 Tages-Header + 3 Frames
+	if len(rows) != 5 { // 2 day headers + 3 frames
 		t.Fatalf("got %d rows, want 5", len(rows))
 	}
 	if !rows[0].isHeader || !rows[2].isHeader {
@@ -68,7 +68,7 @@ func TestBuildRowsGroupsAndFilters(t *testing.T) {
 		t.Errorf("filter beta: %+v", rows)
 	}
 
-	rows = buildRows(frames, p, time.Monday, "x") // Tag-Filter
+	rows = buildRows(frames, p, time.Monday, "x") // tag filter
 	if len(rows) != 2 || rows[1].frame.Project != "alpha" {
 		t.Errorf("filter tag x: %+v", rows)
 	}
@@ -95,7 +95,7 @@ func TestListNavigationSkipsHeaders(t *testing.T) {
 	if f, _ := app.list.selected(); f.Project != "beta" {
 		t.Errorf("after j: %v", f.Project)
 	}
-	app.Update(key("j")) // am Ende: bleibt stehen
+	app.Update(key("j")) // at the end: stays put
 	if f, _ := app.list.selected(); f.Project != "beta" {
 		t.Errorf("j at end moved cursor")
 	}

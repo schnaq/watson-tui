@@ -8,19 +8,19 @@ import (
 	"github.com/schnaq/watson-tui/internal/watson"
 )
 
-// TestPeriodLabel pins the exact German status-bar strings for every unit.
+// TestPeriodLabel pins the exact status-bar strings for every unit.
 // label() is an exported-contract item (Produces, Task 9) that the eight
 // brief tests never exercise; Tasks 10-16 read these strings.
 func TestPeriodLabel(t *testing.T) {
-	ref := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local) // Mittwoch
+	ref := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local) // Wednesday
 	cases := []struct {
 		unit periodUnit
 		want string
 	}{
-		{unitDay, "Mittwoch, 22.07.2026"},
-		{unitWeek, "Woche 20.07. – 26.07.2026"},
-		{unitMonth, "Juli 2026"},
-		{unitAll, "alle Frames"},
+		{unitDay, "Wednesday, 2026-07-22"},
+		{unitWeek, "Week 2026-07-20 – 2026-07-26"},
+		{unitMonth, "July 2026"},
+		{unitAll, "all frames"},
 	}
 	for _, c := range cases {
 		if got := (period{unit: c.unit, ref: ref}).label(time.Monday); got != c.want {
@@ -139,11 +139,11 @@ func TestListMoveEmpty(t *testing.T) {
 // TestListViewEmptyMessages covers view()'s two empty-state messages.
 func TestListViewEmptyMessages(t *testing.T) {
 	l := newListModel(time.Now(), time.Monday)
-	if got := l.view(10, 80); !strings.Contains(got, "keine Frames im Zeitraum") {
+	if got := l.view(10, 80); !strings.Contains(got, "no frames in this period") {
 		t.Errorf("empty view = %q", got)
 	}
 	l.filter = "zzz"
-	if got := l.view(10, 80); !strings.Contains(got, "kein Treffer für Filter »zzz«") {
+	if got := l.view(10, 80); !strings.Contains(got, "no match for filter “zzz”") {
 		t.Errorf("no-match view = %q", got)
 	}
 }
@@ -183,7 +183,7 @@ func TestHeaderFieldsListBranches(t *testing.T) {
 // frame line), which the App.View default branch reaches at runtime but the
 // brief tests do not.
 func TestListViewRendersRows(t *testing.T) {
-	day := time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local) // Montag
+	day := time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local) // Monday
 	l := newListModel(day, time.Monday)
 	l.per = period{unit: unitWeek, ref: day}
 	l.refresh([]watson.Frame{
@@ -193,7 +193,30 @@ func TestListViewRendersRows(t *testing.T) {
 	if !strings.Contains(out, "alpha") {
 		t.Errorf("view missing project: %q", out)
 	}
-	if !strings.Contains(out, "Montag") { // day header (2026-07-20 is a Monday)
+	if !strings.Contains(out, "Monday, 2026-07-20") { // day header
 		t.Errorf("view missing day header: %q", out)
+	}
+}
+
+// TestLabelsAreEnglishISO: the display format matches what the frame form
+// accepts as input, so a date read off the screen can be typed straight back in.
+// The day label goes through formatDay, so it carries the weekday too.
+func TestLabelsAreEnglishISO(t *testing.T) {
+	// Wednesday 2026-07-22; the week (Mon) runs 20.–26.
+	ref := time.Date(2026, 7, 22, 12, 0, 0, 0, time.Local)
+	cases := map[periodUnit]string{
+		unitDay:   "Wednesday, 2026-07-22",
+		unitWeek:  "Week 2026-07-20 – 2026-07-26",
+		unitMonth: "July 2026",
+		unitYear:  "Year 2026",
+		unitAll:   "all frames",
+	}
+	for unit, want := range cases {
+		if got := (period{unit: unit, ref: ref}).label(time.Monday); got != want {
+			t.Errorf("unit %d label = %q, want %q", unit, got, want)
+		}
+	}
+	if got := formatDay(ref); got != "Wednesday, 2026-07-22" {
+		t.Errorf("formatDay = %q, want %q", got, "Wednesday, 2026-07-22")
 	}
 }

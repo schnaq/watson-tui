@@ -39,8 +39,8 @@ func comparisonPeriods(p period) []comparison {
 		return []comparison{
 			// The weekStart given to shift is ignored for day and month
 			// bounds, so Monday here is arbitrary and harmless.
-			{"Vortag", p.shift(time.Monday, -1)},
-			{"Woche", period{unit: unitWeek, ref: p.ref}},
+			{"Prev day", p.shift(time.Monday, -1)},
+			{"Week", period{unit: unitWeek, ref: p.ref}},
 		}
 	case unitWeek:
 		return []comparison{
@@ -48,13 +48,13 @@ func comparisonPeriods(p period) []comparison {
 			// start, and this function has none. Moving ref back seven days
 			// lands in the previous week whatever the week starts on, and
 			// bounds normalizes from there.
-			{"Vorwoche", period{unit: unitWeek, ref: p.ref.AddDate(0, 0, -7)}},
-			{"Monat", period{unit: unitMonth, ref: p.ref}},
+			{"Prev week", period{unit: unitWeek, ref: p.ref.AddDate(0, 0, -7)}},
+			{"Month", period{unit: unitMonth, ref: p.ref}},
 		}
 	case unitMonth:
 		return []comparison{
-			{"Vormonat", p.shift(time.Monday, -1)},
-			{"Jahr", period{unit: unitYear, ref: p.ref}},
+			{"Prev month", p.shift(time.Monday, -1)},
+			{"Year", period{unit: unitYear, ref: p.ref}},
 		}
 	// unitAll has no neighbour to shift to; unitYear is only ever a comparison
 	// itself, never the period the header is showing.
