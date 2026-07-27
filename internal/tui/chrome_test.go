@@ -639,6 +639,67 @@ func TestFooterKeepsHelpAndQuitAt80(t *testing.T) {
 	}
 }
 
+// TestStyleHintAccentsOnlyRealKeys: the accent on a hint's first word is a
+// promise that the word is a key one can press. "andere Taste abbrechen" and
+// "beliebige Taste …" name a class of keys, not one, so they are dimmed whole.
+//
+// The colour profile has to be forced: under go test the renderer strips
+// colour, both styles render to the bare string, and every assertion here would
+// pass on any implementation at all. Set once and restored by defer, because
+// the profile is global — see TestFooterMeasuresBeforeStyling.
+func TestStyleHintAccentsOnlyRealKeys(t *testing.T) {
+	saved := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(0) // termenv.TrueColor
+	defer lipgloss.SetColorProfile(saved)
+
+	// Guard against the test proving nothing because the two styles agree.
+	if styleKey.Render("x") == styleDim.Render("x") {
+		t.Fatal("styleKey and styleDim render alike; this test cannot tell them apart")
+	}
+	accented := func(h, word string) bool {
+		return strings.Contains(h, styleKey.Render(word))
+	}
+	for _, h := range []string{"j/k bewegen", "enter bearbeiten", "q ende"} {
+		word := strings.SplitN(h, " ", 2)[0]
+		if !accented(styleHint(h), word) {
+			t.Errorf("%q: the key %q must carry the accent: %q", h, word, styleHint(h))
+		}
+	}
+	for _, h := range []string{"andere Taste abbrechen", "beliebige Taste schließt die Hilfe",
+		"beliebige Taste beendet watson-tui"} {
+		word := strings.SplitN(h, " ", 2)[0]
+		if accented(styleHint(h), word) {
+			t.Errorf("%q: %q is no key and must not be offered as one: %q", h, word, styleHint(h))
+		}
+		if got, want := styleHint(h), styleDim.Render(h); got != want {
+			t.Errorf("%q: a keyless hint is dimmed whole:\n got %q\nwant %q", h, got, want)
+		}
+	}
+	// The deny-list is not dead code: the modes really do hand out hints that
+	// begin with each of its words, and every one of them comes back dimmed. A
+	// rewording that leaves an entry unused fails here rather than rotting.
+	seen := map[string]bool{}
+	for m := modeList; m <= modeOverview; m++ {
+		for _, g := range footerHints(m) {
+			for _, h := range g {
+				word := strings.SplitN(h, " ", 2)[0]
+				if !keylessLead[word] {
+					continue
+				}
+				seen[word] = true
+				if got, want := styleHint(h), styleDim.Render(h); got != want {
+					t.Errorf("mode %d: %q must be dimmed whole:\n got %q\nwant %q", m, h, got, want)
+				}
+			}
+		}
+	}
+	for word := range keylessLead {
+		if !seen[word] {
+			t.Errorf("keylessLead holds %q, but no mode hands out a hint starting with it", word)
+		}
+	}
+}
+
 // TestFooterHintsAreGerman: the UI speaks German, the identifiers English.
 // "enter edit" and "/ filter" stood here once and contradicted the help screen,
 // which teaches the same two keys as "Frame editieren" and "filtern".

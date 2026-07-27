@@ -571,9 +571,11 @@ func (a *App) footerView() string {
 
 func helpView() string {
 	// Twelve lines, one per key group: the help screen does not scroll, and at 20
-	// terminal lines the panel around it fits thirteen. A longer list would lose
-	// its tail to fitBody — and the tail is where the key that quits sits. That
-	// is also why s/S and r/o share a line instead of taking two each.
+	// terminal lines the panel around it fits exactly twelve — chromeHeight(20)
+	// takes six and the panel border two. There is no slack left, so one more
+	// line loses the tail to fitBody, and the tail is where the key that quits
+	// sits. That is also why s/S and r/o share a line instead of taking two each.
+	// TestHelpViewFitsTwentyLines derives the budget rather than repeating it.
 	return `  j/k, ↓/↑     navigieren
   enter        Frame editieren
   n            neuer Frame

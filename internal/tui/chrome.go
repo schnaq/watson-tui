@@ -114,11 +114,27 @@ func shedHints(hints []string, avail int) string {
 	return strings.Join(kept, hintSep)
 }
 
+// keylessLead are the words a hint that names no single key begins with.
+// "andere Taste abbrechen" and "beliebige Taste schließt die Hilfe" describe a
+// class of keys, and the accent styleHint puts on a first word offers "andere"
+// and "beliebige" as keys one could press.
+//
+// A deny-list of lead words rather than an allow-list of keys, because the two
+// fail in opposite directions: a new hint whose key is missing from an
+// allow-list loses its accent and the key stops standing out, while a new
+// keyless phrase missing from this list merely gets one accent too many — and
+// no key in this UI is spelled like a German adjective, so the list stays short.
+var keylessLead = map[string]bool{"andere": true, "beliebige": true}
+
 // styleHint sets the key off from what it does: "j/k" in the accent colour,
 // "bewegen" dimmed. Two shades in a line of ten hints are what let the eye find
-// the key it is looking for instead of reading the line.
+// the key it is looking for instead of reading the line. A hint that names no
+// key is dimmed whole — see keylessLead.
 func styleHint(h string) string {
 	if i := strings.IndexByte(h, ' '); i > 0 {
+		if keylessLead[h[:i]] {
+			return styleDim.Render(h)
+		}
 		return styleKey.Render(h[:i]) + styleDim.Render(h[i:])
 	}
 	return styleKey.Render(h)

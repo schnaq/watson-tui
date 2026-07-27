@@ -23,12 +23,16 @@ const (
 
 // period is a display time range: a unit plus a reference time inside it.
 //
-// Invariant: ref is the period's start, from construction on — shift(ws, 0)
-// establishes it, and every constructor applies it. bounds() does not care, it
-// normalises anyway, but everyone who reads ref does: the header asks which
-// month a week belongs to, and with ref left at the instant of construction a
-// week across a month boundary answered whichever month that instant fell in,
-// while the same week reached with ] and [ answered the other one.
+// Invariant, for the periods the user navigates — the list's and the report's:
+// ref is the period's start from construction on. shift(ws, 0) establishes it
+// and their constructors apply it. The short-lived ones built only to be
+// measured do not bother (overviewColumns, comparisonPeriods): bounds() and
+// label() normalise anyway, and nothing reads ref back off those.
+//
+// Everyone who does read ref back needs it: the header asks which month a week
+// belongs to, and with ref left at the instant of construction a week across a
+// month boundary answered whichever month that instant fell in, while the same
+// week reached with ] and [ answered the other one.
 type period struct {
 	unit periodUnit
 	ref  time.Time
