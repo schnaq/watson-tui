@@ -522,22 +522,45 @@ func TestHeaderSumAddsUpToTheDayTotals(t *testing.T) {
 	}
 }
 
-// TestComparisonRowNamesNeighbours.
+// TestComparisonRowNamesNeighbours pins which value belongs to which label, in
+// the order the row renders them.
+//
+// The three frames give the two neighbours three different sums, which is what
+// makes the assertions bite. With a single frame in the previous week both
+// neighbours came out at "5h 00m", so two independent Contains-checks over the
+// flattened row passed no matter which label carried which number — swapping the
+// entries of comparisonPeriods, or hanging the wrong period off a label, stayed
+// green. The June frame is outside both neighbours, so a row that summed every
+// frame it was given also fails.
+//
+// The order is asserted because it is part of the contract: the period before
+// the current one first, the larger period containing it second (see
+// comparisonPeriods), which is the order the spec renders as
+// "Vorwoche … · Monat …".
 func TestComparisonRowNamesNeighbours(t *testing.T) {
 	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
 	app := newTestApp(t)
 	app.now = now
 	app.frames = []watson.Frame{
 		mkFrame("a1111111111111111111111111111111", "p",
-			time.Date(2026, 7, 14, 9, 0, 0, 0, time.Local), 5*time.Hour), // Vorwoche
+			time.Date(2026, 7, 14, 9, 0, 0, 0, time.Local), 5*time.Hour), // Vorwoche und Monat
+		mkFrame("b2222222222222222222222222222222", "p",
+			time.Date(2026, 7, 21, 9, 0, 0, 0, time.Local), 2*time.Hour), // nur Monat
+		mkFrame("c3333333333333333333333333333333", "p",
+			time.Date(2026, 6, 30, 9, 0, 0, 0, time.Local), time.Hour), // weder noch
+	}
+	want := []headerField{
+		{label: "Vorwoche", value: "5h 00m"},
+		{label: "Monat", value: "7h 00m"},
 	}
 	row := app.comparisonRow(period{unit: unitWeek, ref: now})
-	flat := ""
-	for _, f := range row {
-		flat += f.label + " " + f.value + " "
+	if len(row) != len(want) {
+		t.Fatalf("comparison row = %+v, want %d fields", row, len(want))
 	}
-	if !strings.Contains(flat, "Vorwoche") || !strings.Contains(flat, "5h 00m") {
-		t.Errorf("comparison row = %q", flat)
+	for i, w := range want {
+		if row[i] != w {
+			t.Errorf("field %d = %+v, want %+v", i, row[i], w)
+		}
 	}
 	if got := app.comparisonRow(period{unit: unitAll, ref: now}); len(got) != 0 {
 		t.Errorf("unitAll has no comparison row, got %+v", got)
