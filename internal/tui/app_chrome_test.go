@@ -738,13 +738,12 @@ func TestReportComparisonCountsTheRunningTimer(t *testing.T) {
 	if !ok {
 		t.Fatal("the report header has no Monat field")
 	}
+	// Pinned to the month's own aggregate rather than to "the month is at least
+	// the week": both sides of that comparison would be computed here from the
+	// same frames, so it would hold whatever comparisonRow returned. Equality with
+	// the timer counted gives the containment for free.
 	if got != formatDuration(want) {
 		t.Errorf("Monat = %q, want %q", got, formatDuration(want))
-	}
-	// The month contains the week, so it can never be the smaller number.
-	if sum, _ := headerFieldByLabel(fields, "Summe"); want < sumInPeriod(
-		withRunning(app.frames, app.state, app.now), app.report.per, app.cfg.WeekStart) {
-		t.Errorf("Monat %q is smaller than the Summe %q of the week inside it", got, sum)
 	}
 	if without := formatDuration(sumInPeriod(app.frames, month, app.cfg.WeekStart)); got == without {
 		t.Fatalf("the fixture's timer contributes nothing to the month (also %q)", without)
