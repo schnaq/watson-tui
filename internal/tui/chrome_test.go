@@ -639,6 +639,34 @@ func TestFooterKeepsHelpAndQuitAt80(t *testing.T) {
 	}
 }
 
+// TestFooterHintsAreGerman: the UI speaks German, the identifiers English.
+// "enter edit" and "/ filter" stood here once and contradicted the help screen,
+// which teaches the same two keys as "Frame editieren" and "filtern".
+//
+// Whole hint strings, not substrings: "/ filtern" contains "filter", so a
+// Contains check would pass on the very string it is supposed to reject. And
+// presence alone does not pin anything — a refactor that adds the English
+// spelling back beside the German one has to fail too, so the English ones are
+// asserted absent.
+func TestFooterHintsAreGerman(t *testing.T) {
+	have := map[string]bool{}
+	for _, g := range footerHints(modeList) {
+		for _, h := range g {
+			have[h] = true
+		}
+	}
+	for _, want := range []string{"enter bearbeiten", "/ filtern"} {
+		if !have[want] {
+			t.Errorf("list hints lost the German hint %q: %v", want, footerHints(modeList))
+		}
+	}
+	for _, unwanted := range []string{"enter edit", "/ filter"} {
+		if have[unwanted] {
+			t.Errorf("list hints went back to English with %q: %v", unwanted, footerHints(modeList))
+		}
+	}
+}
+
 // TestHelpViewFitsTwentyLines: the help screen does not scroll, so fitBody cuts
 // whatever does not fit — from the bottom of the list, where the quit key sits.
 // The budget is taken from the code, not from a literal, so a change to the

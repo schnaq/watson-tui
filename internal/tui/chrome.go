@@ -173,13 +173,17 @@ func footerHints(m mode) [][]string {
 		// second. "[ ] Zeitraum" and "t/w/m/a" are why this change exists: the
 		// period read as a state because no hint ever said it could be moved.
 		//
-		// "? hilfe" and "q ende" sit third and fourth in the second group on
+		// "? hilfe" and "q ende" sit second and third in the second group on
 		// purpose. About six hints of it survive at 80 columns, and these two
-		// are the ones there is no way left to look up once they are gone.
+		// are the ones there is no way left to look up once they are gone. They
+		// used to sit third and fourth, behind "n neu"; "enter bearbeiten" is six
+		// columns wider than the "enter edit" that stood here in English, and at
+		// the 60 columns the merged single line has to work at, that width came
+		// out of "? hilfe". Moving it up one slot is what buys it back.
 		return [][]string{
 			{"j/k bewegen", "[ ] Zeitraum", "t/w/m/a Tag/Woche/Monat/alles"},
-			{"enter edit", "n neu", "? hilfe", "q ende", "d löschen", "s timer",
-				"/ filter", "r report", "o übersicht", "R neu laden"},
+			{"enter bearbeiten", "? hilfe", "q ende", "n neu", "d löschen", "s timer",
+				"/ filtern", "r report", "o übersicht", "R neu laden"},
 		}
 	}
 }
