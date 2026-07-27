@@ -240,6 +240,20 @@ func TestHeaderFieldsPerMode(t *testing.T) {
 	}
 }
 
+// headerFieldByLabel returns the value of the first field carrying label, so a
+// test can compare one field exactly instead of searching the flattened header
+// for a substring.
+func headerFieldByLabel(rows [][]headerField, label string) (string, bool) {
+	for _, r := range rows {
+		for _, f := range r {
+			if f.label == label {
+				return f.value, true
+			}
+		}
+	}
+	return "", false
+}
+
 func renderFieldsFlat(rows [][]headerField) string {
 	var parts []string
 	for _, r := range rows {
@@ -418,5 +432,172 @@ func TestFatalPanelIsErrorColoured(t *testing.T) {
 	app.mode = modeReport
 	if out := app.View(); strings.Contains(out, corner) {
 		t.Errorf("only the fatal screen may frame itself in the error colour, got:\n%q", out)
+	}
+}
+
+// TestPeriodFieldShowsItIsShiftable: the brackets are the affordance for [ and ].
+func TestPeriodFieldShowsItIsShiftable(t *testing.T) {
+	now := time.Now()
+	app := newTestApp(t)
+	for _, u := range []periodUnit{unitDay, unitWeek, unitMonth} {
+		f := app.periodField("Zeitraum", period{unit: u, ref: now})
+		if !strings.Contains(f.value, "‹") || !strings.Contains(f.value, "›") {
+			t.Errorf("unit %d must show the shift affordance: %q", u, f.value)
+		}
+	}
+	f := app.periodField("Zeitraum", period{unit: unitAll, ref: now})
+	if strings.Contains(f.value, "‹") {
+		t.Errorf("unitAll cannot be shifted, so no affordance: %q", f.value)
+	}
+}
+
+// TestSumFieldMatchesTheListAndFlagsTheTimer: the header sum must add up to the
+// day totals below it, and say so when a running timer is not in it.
+func TestSumFieldMatchesTheListAndFlagsTheTimer(t *testing.T) {
+	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
+	app := newTestApp(t)
+	app.now = now
+	app.frames = []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "p", now.Add(-3*time.Hour), 2*time.Hour),
+		mkFrame("b2222222222222222222222222222222", "p", now.Add(-30*time.Hour), 30*time.Minute),
+	}
+	p := period{unit: unitAll, ref: now}
+
+	f := app.sumField(p)
+	if !strings.Contains(f.value, "2h 30m") {
+		t.Errorf("sum = %q, want 2h 30m", f.value)
+	}
+	if strings.Contains(f.value, "läuft") {
+		t.Errorf("no timer runs, so no flag: %q", f.value)
+	}
+
+	app.state = &watson.State{Project: "läuft", Start: now.Add(-time.Hour), Tags: []string{}}
+	f = app.sumField(p)
+	if !strings.Contains(f.value, "2h 30m") {
+		t.Errorf("running timer must not change the sum: %q", f.value)
+	}
+	if !strings.Contains(f.value, "läuft") {
+		t.Errorf("running timer must be flagged: %q", f.value)
+	}
+}
+
+// TestHeaderSumAddsUpToTheDayTotals: the constraint the sum exists for. It sits
+// one row above the list, so it has to count exactly the frames the list shows —
+// and the list also filters. Summing a.frames unfiltered puts a header of
+// "3h 00m" above day totals adding up to "1h 00m", which reads as a bug in the
+// day totals. The filtered case is the one that used to disagree; the plain one
+// is here so a sumField that always returns zero cannot pass.
+func TestHeaderSumAddsUpToTheDayTotals(t *testing.T) {
+	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
+	app := newTestApp(t)
+	app.now = now
+	app.frames = []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "schnaq",
+			time.Date(2026, 7, 21, 9, 0, 0, 0, time.Local), time.Hour),
+		mkFrame("b2222222222222222222222222222222", "kunde-a",
+			time.Date(2026, 7, 21, 13, 0, 0, 0, time.Local), 2*time.Hour),
+	}
+	app.list.per = period{unit: unitAll, ref: now}
+
+	for _, filter := range []string{"", "schnaq"} {
+		app.list.filter = filter
+		app.list.refresh(app.frames, app.cfg.WeekStart)
+		var days time.Duration
+		for _, r := range app.list.rows {
+			if r.isHeader {
+				days += r.total
+			}
+		}
+		// The rendered header, not sumField: the list narrows the frames at the
+		// call site, and the constraint is about what the user reads.
+		// Equality, not Contains: "1h 00m" is a substring of "11h 00m", so a
+		// header that counted too much would pass a contains-check.
+		got, ok := headerFieldByLabel(app.headerFields(), "Summe")
+		if !ok {
+			t.Fatalf("filter %q: the list header has no Summe field", filter)
+		}
+		if want := formatDuration(days); got != want {
+			t.Errorf("filter %q: header sum %q, day totals %q", filter, got, want)
+		}
+	}
+}
+
+// TestComparisonRowNamesNeighbours.
+func TestComparisonRowNamesNeighbours(t *testing.T) {
+	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
+	app := newTestApp(t)
+	app.now = now
+	app.frames = []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "p",
+			time.Date(2026, 7, 14, 9, 0, 0, 0, time.Local), 5*time.Hour), // Vorwoche
+	}
+	row := app.comparisonRow(period{unit: unitWeek, ref: now})
+	flat := ""
+	for _, f := range row {
+		flat += f.label + " " + f.value + " "
+	}
+	if !strings.Contains(flat, "Vorwoche") || !strings.Contains(flat, "5h 00m") {
+		t.Errorf("comparison row = %q", flat)
+	}
+	if got := app.comparisonRow(period{unit: unitAll, ref: now}); len(got) != 0 {
+		t.Errorf("unitAll has no comparison row, got %+v", got)
+	}
+}
+
+// TestComparisonRowShowsDashForZero.
+func TestComparisonRowShowsDashForZero(t *testing.T) {
+	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
+	app := newTestApp(t)
+	app.now = now
+	row := app.comparisonRow(period{unit: unitWeek, ref: now})
+	for _, f := range row {
+		if strings.Contains(f.value, "0m") {
+			t.Errorf("zero must read as a dash, got %q", f.value)
+		}
+	}
+	if len(row) == 0 || !strings.Contains(row[0].value, "–") {
+		t.Errorf("comparison row = %+v", row)
+	}
+}
+
+// TestViewDropsComparisonRowBeforeTheFrame: at 20-23 lines the comparison goes,
+// the framed header stays.
+func TestViewDropsComparisonRowBeforeTheFrame(t *testing.T) {
+	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
+	app := newTestApp(t)
+	app.now = now
+	app.frames = []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "p",
+			time.Date(2026, 7, 14, 9, 0, 0, 0, time.Local), 5*time.Hour),
+	}
+	app.list.per = period{unit: unitWeek, ref: now}
+	app.list.refresh(app.frames, time.Monday)
+
+	app.Update(tea.WindowSizeMsg{Width: 100, Height: 26})
+	if !strings.Contains(app.View(), "Vorwoche") {
+		t.Error("at 26 lines the comparison row belongs in the header")
+	}
+	app.Update(tea.WindowSizeMsg{Width: 100, Height: 21})
+	out := app.View()
+	if strings.Contains(out, "Vorwoche") {
+		t.Errorf("at 21 lines the comparison row must give way:\n%s", out)
+	}
+	if !strings.Contains(out, "╭") {
+		t.Errorf("but the frame stays at 21 lines:\n%s", out)
+	}
+}
+
+// TestViewShowsPeriodKeysInTheFooter: the discoverability fix, end to end.
+func TestViewShowsPeriodKeysInTheFooter(t *testing.T) {
+	app := newTestApp(t)
+	for _, size := range []tea.WindowSizeMsg{{Width: 100, Height: 30}, {Width: 80, Height: 24}, {Width: 80, Height: 20}} {
+		app.Update(size)
+		out := app.View()
+		if !strings.Contains(out, "[ ]") {
+			t.Errorf("%dx%d: the period keys must be visible:\n%s", size.Width, size.Height, out)
+		}
+		if !strings.Contains(out, "q ende") {
+			t.Errorf("%dx%d: the quit key must be visible:\n%s", size.Width, size.Height, out)
+		}
 	}
 }

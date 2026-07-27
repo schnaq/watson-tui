@@ -4,6 +4,7 @@ package tui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -377,18 +378,85 @@ func (a *App) timerField() headerField {
 		fmt.Sprintf("▶ %s %s", label, formatClock(a.now.Sub(a.state.Start))))}
 }
 
-// headerFields returns the context rows of the header for the active mode.
-// Always two rows: chromeHeight budgets four lines for the framed header, which
-// is two field rows plus the border, and a mode with fewer would leave the body
-// a line it never uses.
+// periodField renders the period as "‹ label ›" so the brackets show that [ and
+// ] move it. The keys were in nobody's way — they were simply invisible, because
+// a bare date reads as a fact about the view and not as something one can walk
+// along. unitAll cannot be shifted, so it gets no brackets: an affordance that
+// does nothing when pressed is worse than none.
+func (a *App) periodField(label string, p period) headerField {
+	text := p.label(a.cfg.WeekStart)
+	if p.unit == unitAll {
+		return headerField{label: label, value: text}
+	}
+	return headerField{
+		label: label,
+		value: styleDim.Render("‹ ") + text + styleDim.Render(" ›"),
+	}
+}
+
+// sumField renders the sum of every frame in p. The list narrows the frames
+// first — see the call in headerFields.
+func (a *App) sumField(p period) headerField {
+	return a.sumFieldOf(a.frames, p)
+}
+
+// sumFieldOf is sumField over a given set of frames, because the list's header
+// has to count the frames the list shows: its sum sits one row above the day
+// totals, and a header of "9h 45m" above days adding up to "2h 30m" reads as a
+// bug in the day totals.
+//
+// A running timer is deliberately not counted — it is not a frame yet, and the
+// day totals below do not count it either — but it is flagged, because the
+// report and the overview do count it and the numbers would otherwise disagree
+// without saying why.
+func (a *App) sumFieldOf(frames []watson.Frame, p period) headerField {
+	value := formatDuration(sumInPeriod(frames, p, a.cfg.WeekStart))
+	if runningInPeriod(a.state, p, a.cfg.WeekStart) {
+		value += styleRunning.Render(" + läuft")
+	}
+	return headerField{label: "Summe", value: value}
+}
+
+// comparisonRow renders the neighbouring periods of p — the one before it and
+// the larger one containing it — so a number has something to be read against.
+// Zero reads as a dash: "0m" invites the question whether it means nothing was
+// booked or nothing is known.
+func (a *App) comparisonRow(p period) []headerField {
+	cs := comparisonPeriods(p)
+	if len(cs) == 0 {
+		return nil
+	}
+	fields := make([]headerField, 0, len(cs))
+	for _, c := range cs {
+		d := sumInPeriod(a.frames, c.per, a.cfg.WeekStart)
+		value := "–"
+		if d > 0 {
+			value = formatDuration(d)
+		}
+		fields = append(fields, headerField{label: c.label, value: value})
+	}
+	return fields
+}
+
+// headerFields returns the context rows of the header for the active mode. Up
+// to four rows, which is what chromeHeight budgets the framed header from
+// height 24 up; the comparison row is row two so that headerView can take it
+// back out first when the terminal pays for only three. The last row is the
+// timer in every mode — see fitHeaderRows.
+//
+// Rows that a mode has nothing to put in come back empty rather than blank:
+// headerView drops them before the budget applies, so an invisible row never
+// costs a visible one.
 func (a *App) headerFields() [][]headerField {
 	timer := a.timerField()
 	switch a.mode {
 	case modeList:
 		n := 0
+		projects := map[string]bool{}
 		for _, r := range a.list.rows {
 			if !r.isHeader {
 				n++
+				projects[r.frame.Project] = true
 			}
 		}
 		filter := "—"
@@ -398,20 +466,33 @@ func (a *App) headerFields() [][]headerField {
 			filter = a.list.filter
 		}
 		return [][]headerField{
-			{{"Zeitraum", a.list.per.label(a.cfg.WeekStart)}, {"Frames", fmt.Sprintf("%d", n)}},
-			{{"Filter", filter}, timer},
+			{a.periodField("Zeitraum", a.list.per),
+				a.sumFieldOf(filterFrames(a.frames, a.list.filter), a.list.per)},
+			a.comparisonRow(a.list.per),
+			{{"Filter", filter}, {"", fmt.Sprintf("%d Frames · %d Projekte", n, len(projects))}},
+			{{}, timer},
 		}
 	case modeReport:
 		lines, _ := aggregate(withRunning(a.frames, a.state, a.now), a.report.per, a.cfg.WeekStart)
 		return [][]headerField{
-			{{"Report", a.report.per.label(a.cfg.WeekStart)}, {"Projekte", fmt.Sprintf("%d", len(lines))}},
+			{a.periodField("Report", a.report.per), a.sumField(a.report.per)},
+			a.comparisonRow(a.report.per),
+			{{}, {"", fmt.Sprintf("%d Projekte", len(lines))}},
 			{{}, timer},
 		}
 	case modeOverview:
-		rows, _ := buildOverview(withRunning(a.frames, a.state, a.now),
-			overviewColumns(a.now, a.cfg.WeekStart), a.cfg.WeekStart)
+		// Fixed columns, so there is no period to shift and no neighbour to
+		// compare against — the table already is the comparison. The sum is the
+		// last column of the table, the one billing reads.
+		cols := overviewColumns(a.now, a.cfg.WeekStart)
+		rows, totals := buildOverview(withRunning(a.frames, a.state, a.now), cols, a.cfg.WeekStart)
+		grand := time.Duration(0)
+		if len(totals) > 0 {
+			grand = totals[len(totals)-1]
+		}
 		return [][]headerField{
-			{{"Übersicht", "Abrechnung"}, {"Projekte", fmt.Sprintf("%d", len(rows))}},
+			{{"Übersicht", "Abrechnung"}, {"Summe gesamt", formatDuration(grand)}},
+			{{}, {"", fmt.Sprintf("%d Projekte", len(rows))}},
 			{{}, timer},
 		}
 	case modeForm:
@@ -538,8 +619,34 @@ func (a *App) View() string {
 // headerView draws the context panel for the active mode. Together with
 // footerView it occupies exactly chromeHeight(a.height) lines, which is what
 // View's body arithmetic above is built on.
+//
+// Two things happen to the rows before renderHeader sees them, and only one of
+// them is renderHeader's business. Empty rows go first: a mode that has no
+// comparison to show (the period is "alle Frames", or the mode has no period at
+// all) hands back an empty row, and letting it through would spend a line of the
+// budget on nothing. Then, when the terminal pays for three rows instead of four,
+// the comparison row gives way — it is the one field a user can work without,
+// and it is the row this function knows the position of. What renderHeader does
+// with the rest is its own affair: fitHeaderRows makes the count exact and keeps
+// the timer last, so nothing here has to cut a tail and risk taking the timer
+// with it.
 func (a *App) headerView() string {
-	return renderHeader(a.width, a.height, a.version, a.headerFields())
+	rows := a.headerFields()
+	compact := make([][]headerField, 0, len(rows))
+	for _, r := range rows {
+		if len(r) == 0 {
+			continue
+		}
+		compact = append(compact, r)
+	}
+	// Only from three rows up: below that renderHeader collapses to a single
+	// line built from the first value and the last one, and dropping a row there
+	// changes nothing — while a budget of one is not a reason to throw away
+	// three rows the collapsed line is going to read across anyway.
+	if budget := headerRowBudget(a.height); budget >= 3 && len(compact) > budget {
+		compact = slices.Delete(compact, 1, 2)
+	}
+	return renderHeader(a.width, a.height, a.version, compact)
 }
 
 // footerView draws the key hints, one line per group — but only as many groups

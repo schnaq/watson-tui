@@ -136,16 +136,31 @@ func matchesFilter(f watson.Frame, needle string) bool {
 	return strings.HasPrefix(f.ID, needle)
 }
 
+// filterFrames narrows frames to the ones the filter matches, and hands them
+// back untouched when there is none. It is not folded into buildRows because
+// the header sums the same selection: its sum sits one row above the day totals
+// and has to agree with them, and two places spelling out "lowercase, trim,
+// match" is one place too many for that to keep holding.
+func filterFrames(frames []watson.Frame, filter string) []watson.Frame {
+	needle := strings.ToLower(strings.TrimSpace(filter))
+	if needle == "" {
+		return frames
+	}
+	sel := make([]watson.Frame, 0, len(frames))
+	for _, fr := range frames {
+		if matchesFilter(fr, needle) {
+			sel = append(sel, fr)
+		}
+	}
+	return sel
+}
+
 // buildRows filters frames to period+filter, sorts by start, groups by local day.
 func buildRows(frames []watson.Frame, p period, weekStart time.Weekday, filter string) []row {
 	from, to, bounded := p.bounds(weekStart)
-	needle := strings.ToLower(strings.TrimSpace(filter))
 	var sel []watson.Frame
-	for _, fr := range frames {
+	for _, fr := range filterFrames(frames, filter) {
 		if bounded && (fr.Start.Before(from) || !fr.Start.Before(to)) {
-			continue
-		}
-		if needle != "" && !matchesFilter(fr, needle) {
 			continue
 		}
 		sel = append(sel, fr)

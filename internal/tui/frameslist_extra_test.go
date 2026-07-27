@@ -158,7 +158,9 @@ func TestHeaderFieldsListBranches(t *testing.T) {
 	app.list.per = period{unit: unitAll, ref: time.Now()}
 	app.list.refresh(app.frames, time.Monday)
 
-	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Frames 0") ||
+	// "0 Frames", not "Frames 0": the count shares its row with the number of
+	// projects, so it carries its own unit instead of a label.
+	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "0 Frames") ||
 		!strings.Contains(got, "Filter —") {
 		t.Errorf("plain header = %q", got)
 	}
