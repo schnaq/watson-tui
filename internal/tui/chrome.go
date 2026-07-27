@@ -173,7 +173,9 @@ func footerHints(m mode) [][]string {
 	case modeForm:
 		return [][]string{{"tab field", "→ suggestion", "enter save", "esc cancel"}}
 	case modeReport:
-		return [][]string{{"t/w/m period", "[ ] shift", "esc back"}}
+		// Same wording as the list: both views take the arrows and the brackets,
+		// so advertising different keys in each would read as a difference.
+		return [][]string{{"t/w/m period", "← → shift", "esc back"}}
 	case modeOverview:
 		return [][]string{{"esc back"}}
 	case modeStartTimer:

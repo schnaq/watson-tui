@@ -4,8 +4,6 @@ A lean terminal UI for [Watson](https://jazzband.github.io/Watson/) time
 tracking, in Go. It reads and writes Watson's data format directly — you do not
 need Watson installed, and existing data keeps working as it is.
 
-The interface itself is German.
-
 ## Installation
 
 ```sh
@@ -46,9 +44,9 @@ The header shows which period you are looking at — the angles `‹ ›` mean `
 and `→` shift it (`[` and `]` do the same) — plus that period's total, a
 comparison against the previous period and the next larger one (for a week,
 that is the previous week and the month), the number of frames and projects,
-and any running timer. `alle Frames` cannot be shifted, so it gets neither
+and any running timer. `all frames` cannot be shifted, so it gets neither
 angles nor a comparison. The list header's total matches the list below it and
-therefore leaves a running timer out; when `+ läuft` follows it, that is exactly
+therefore leaves a running timer out; when `+ running` follows it, that is exactly
 why the report and the overview show more for the same period — their headers
 count it, because their tables do too.
 
@@ -86,10 +84,10 @@ much time per tag", not "how does this project break down".
 
 The overview (`o`) is the billing view: totals per project across this week,
 last week, this month, last month and everything. The table adapts to the
-terminal width: below about 94 columns the column titles are shortened
-(`Vorwoche`, `Vormonat`), below about 70 the project column shrinks as well.
+terminal width: below about 78 columns the month column titles are shortened
+(`prev mo`), below about 70 the project column shrinks as well.
 Below about 62 columns whole value columns drop out — which ones is printed
-above the table, and `gesamt` always stays. No duration is ever cut off.
+above the table, and `all` always stays. No duration is ever cut off.
 
 **How time is attributed to a period** — this matters if you write invoices
 from it:
@@ -100,7 +98,7 @@ from it:
 - A running timer counts up to now and is called out below the table — in the
   overview and the report alike, and in their header totals as well. Only the
   frame list leaves it out of its header total, so that total still adds up to
-  the day totals below it, and writes `+ läuft` after it.
+  the day totals below it, and writes `+ running` after it.
 - Everything is based on your local time zone; the week start comes from
   Watson's `config` (`[options] week_start`, Monday by default).
 
