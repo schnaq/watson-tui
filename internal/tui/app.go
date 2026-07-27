@@ -86,7 +86,7 @@ func (a *App) reload() {
 	}
 	a.frames = frames
 	a.state = state
-	a.list.refresh(a.frames, a.cfg.WeekStart)
+	a.list.refresh(a.frames, a.cfg.WeekStart, a.state, a.now)
 }
 
 func (a *App) fatal(msg string) {
@@ -185,10 +185,10 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			var cmd tea.Cmd
 			a.list.filterInput, cmd = a.list.filterInput.Update(msg)
 			a.list.filter = a.list.filterInput.Value()
-			a.list.refresh(a.frames, a.cfg.WeekStart)
+			a.list.refresh(a.frames, a.cfg.WeekStart, a.state, a.now)
 			return a, cmd
 		}
-		a.list.refresh(a.frames, a.cfg.WeekStart)
+		a.list.refresh(a.frames, a.cfg.WeekStart, a.state, a.now)
 		return a, nil
 	}
 	switch msg.String() {
@@ -225,10 +225,10 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// typed the arrows still move the text cursor.
 	case "[", "left":
 		a.list.per = a.list.per.shift(a.cfg.WeekStart, -1)
-		a.list.refresh(a.frames, a.cfg.WeekStart)
+		a.list.refresh(a.frames, a.cfg.WeekStart, a.state, a.now)
 	case "]", "right":
 		a.list.per = a.list.per.shift(a.cfg.WeekStart, +1)
-		a.list.refresh(a.frames, a.cfg.WeekStart)
+		a.list.refresh(a.frames, a.cfg.WeekStart, a.state, a.now)
 	case "t":
 		a.setPeriodUnit(unitDay)
 	case "w":
@@ -257,6 +257,12 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if a.state != nil {
 			a.mode = modeConfirmCancel
 		}
+	case "f":
+		// The two answers to two different questions: the summary says what was
+		// worked on, the frame list which sessions there were. One key, because
+		// the second is only ever wanted on the way to editing one of them.
+		a.list.compact = !a.list.compact
+		a.list.refresh(a.frames, a.cfg.WeekStart, a.state, a.now)
 	case "R":
 		a.reload()
 	case "r":
@@ -270,7 +276,7 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (a *App) setPeriodUnit(u periodUnit) {
 	a.list.per = period{unit: u, ref: time.Now()}.shift(a.cfg.WeekStart, 0)
-	a.list.refresh(a.frames, a.cfg.WeekStart)
+	a.list.refresh(a.frames, a.cfg.WeekStart, a.state, a.now)
 }
 
 func (a *App) updateForm(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -480,14 +486,6 @@ func (a *App) headerFields() [][]headerField {
 	timer := a.timerField()
 	switch a.mode {
 	case modeList:
-		n := 0
-		projects := map[string]bool{}
-		for _, r := range a.list.rows {
-			if r.kind == rowFrame {
-				n++
-				projects[r.frame.Project] = true
-			}
-		}
 		filter := "—"
 		if a.list.filtering {
 			filter = a.list.filterInput.View()
@@ -498,9 +496,30 @@ func (a *App) headerFields() [][]headerField {
 		// The sum sits above the day totals of exactly these, and the neighbours are
 		// read against that sum.
 		shown := filterFrames(a.frames, a.list.filter)
+		// Counted off the frames rather than off the rows. The rows used to be the
+		// only place a frame appeared, but the summary has no frame rows at all, and
+		// counting them there put "0 frames · 0 projects" over a full week of work.
+		n := 0
+		projects := map[string]bool{}
+		for _, f := range framesInPeriod(shown, a.list.per, a.cfg.WeekStart) {
+			n++
+			projects[f.Project] = true
+		}
+		// Which of the two sum fields depends on the view, because the two views
+		// count differently: the summary folds the running timer into its day
+		// totals, so the Total above them counts it and carries no flag; the frame
+		// list shows stopped frames only, so its Total leaves the timer out and says
+		// so. See the note above sumFieldWithoutRunning — the third combination, a
+		// flag reading "not counted" over a number that counts it, is the one that
+		// must not be reachable. The comparison row follows the same choice, or a
+		// neighbour comes out smaller than the Total it stands beside.
+		sum, counted := a.sumFieldWithoutRunning(shown, a.list.per), shown
+		if a.list.compact {
+			sum, counted = a.sumFieldWithRunning(shown, a.list.per), withRunning(shown, a.state, a.now)
+		}
 		return [][]headerField{
-			{a.periodField("Period", a.list.per), a.sumFieldWithoutRunning(shown, a.list.per)},
-			a.comparisonRow(shown, a.list.per),
+			{a.periodField("Period", a.list.per), sum},
+			a.comparisonRow(counted, a.list.per),
 			{{"Filter", filter}, {"", fmt.Sprintf("%d frames · %d projects", n, len(projects))}},
 			{{}, timer},
 		}
@@ -568,8 +587,10 @@ func panelBorder(m mode) lipgloss.Style {
 	return styleBorder
 }
 
-// panelTitle names the body panel of the active mode.
-func panelTitle(m mode) string {
+// panelTitle names the body panel of the active mode. The list has two of them
+// and f swaps between them, so the title is where a user reads which one is on
+// screen — "Frames" over day blocks would be the one label that lies.
+func panelTitle(m mode, compact bool) string {
 	switch m {
 	case modeForm:
 		return "Frame"
@@ -584,6 +605,9 @@ func panelTitle(m mode) string {
 	case modeFatal:
 		return "Error"
 	default:
+		if compact {
+			return "Summary"
+		}
 		return "Frames"
 	}
 }
@@ -644,7 +668,7 @@ func (a *App) View() string {
 		parts = append(parts, header)
 	}
 	if framed {
-		parts = append(parts, panel(panelTitle(a.mode), body, a.width, panelBorder(a.mode)))
+		parts = append(parts, panel(panelTitle(a.mode, a.list.compact), body, a.width, panelBorder(a.mode)))
 	} else {
 		parts = append(parts, body)
 	}
@@ -697,7 +721,7 @@ func (a *App) headerView() string {
 // Padding at all is what keeps the body panel from jumping a row when the mode
 // changes.
 func (a *App) footerView() string {
-	groups := footerHints(a.mode)
+	groups := footerHints(a.mode, a.list.compact)
 	if n := footerLines(a.height); len(groups) > n {
 		if n == 1 {
 			groups = [][]string{mergeHints(groups)}
@@ -719,9 +743,14 @@ func helpView() string {
 	// show: at height 14 the chrome takes two lines and the panel border two more,
 	// which leaves exactly ten. The budget is not monotonic — height 20 is the
 	// other tight spot, with twelve, because there the chrome costs six. That is
-	// why n/d, s/S, r/o and R/? each share a line instead of taking two.
+	// why n/d, s/S, r/o and R/?/q each share a line instead of taking two.
 	// TestHelpFitsEveryTerminalWithAHeader derives the budget rather than
 	// repeating it.
+	//
+	// f is fourth, with the keys that decide what one is looking at rather than
+	// with the ones that change something. It is the only key that reveals a view
+	// nothing else on screen mentions, so a help screen without it leaves half the
+	// UI to be found by accident — q gave up its own line for it and joined R/?.
 	//
 	// The period keys come second and third, ahead of the actions: they are what
 	// this screen was revisited for, and a terminal too short even for ten lines
@@ -730,11 +759,11 @@ func helpView() string {
 	return `  j/k, ↓/↑     move
   ← →, [ ]     previous/next period (‹ › in the header)
   t/w/m/a      day/week/month/all
-  enter        edit frame
+  f            summary · frame list
+  enter        edit frame (in the frame list)
   n / d        new frame · delete frame
   s / S        start/stop timer · discard
   /            filter
   r / o        report · overview (billing)
-  R / ?        reload · this help
-  q            quit`
+  R / ? / q    reload · this help · quit`
 }

@@ -84,11 +84,11 @@ func renderFooter(width int, groups [][]string, errMsg string) string {
 const hintSep = " · "
 
 // shedHints joins the hints that fit avail columns and drops the rest from the
-// tail. Whole hints only: the list mode's second group alone needs 103 columns,
+// tail. Whole hints only: the frame list's second group alone needs 115 columns,
 // so on any normal terminal something has to go, and a footer ending in "q qu"
 // reads as a key that does not exist. Callers order their hints by how badly the
 // user needs them, so what goes is what the help screen can still teach.
-// TestFooterShedsWholeHints asserts the 103 instead of leaving it to rot here.
+// TestFooterShedsWholeHints asserts the 115 instead of leaving it to rot here.
 //
 // Every hint is measured plain and styled only once it is kept. lipgloss.Width
 // does step over escape sequences, so that order is not what makes the
@@ -168,7 +168,12 @@ func mergeHints(groups [][]string) []string {
 // footerHints lists the keys that work in the given mode, in groups of one line
 // each, most important first — shedHints drops from the tail of every group.
 // Only the list has enough keys to need two lines; the other modes keep one.
-func footerHints(m mode) [][]string {
+//
+// compact says which of the two list views is on screen. It is a parameter and
+// not a lookup, because the hints are a promise: enter and d need a frame, the
+// summary selects a project, so advertising them there would name two keys that
+// do nothing. Every other mode ignores it.
+func footerHints(m mode, compact bool) [][]string {
 	switch m {
 	case modeForm:
 		return [][]string{{"tab field", "→ suggestion", "enter save", "esc cancel"}}
@@ -201,10 +206,24 @@ func footerHints(m mode) [][]string {
 		// columns the merged single line has to work at, the difference came out
 		// of "? hilfe". English pays those columns back, so the two sit behind
 		// "n new" again.
+		//
+		// "f" names the view it goes to, not the one it leaves: a hint reading
+		// "f frames" is a thing one can want, where "f toggle" would be a thing one
+		// has to try. It sits in the same slot in both views — directly behind
+		// "q quit", never ahead of it. Leading the group instead cost "? help" its
+		// place on the 60-column merged line, which is the one thing this footer's
+		// order exists to prevent; behind the two exits it changes nothing about
+		// what survives, and in the summary, whose group is the shorter one, it
+		// still fits at 60.
+		second := []string{"n new", "? help", "q quit", "f frames", "s timer",
+			"/ filter", "r report", "o overview", "R reload"}
+		if !compact {
+			second = []string{"enter edit", "n new", "? help", "q quit", "f summary",
+				"d delete", "s timer", "/ filter", "r report", "o overview", "R reload"}
+		}
 		return [][]string{
 			{"j/k move", "← → period", "t/w/m/a day/week/month/all"},
-			{"enter edit", "n new", "? help", "q quit", "d delete", "s timer",
-				"/ filter", "r report", "o overview", "R reload"},
+			second,
 		}
 	}
 }

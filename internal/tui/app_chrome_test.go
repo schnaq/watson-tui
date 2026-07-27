@@ -38,7 +38,12 @@ func chromeApp(t *testing.T, now time.Time, width, height int, frames []watson.F
 	app.Update(tea.WindowSizeMsg{Width: width, Height: height})
 	app.frames = frames
 	app.list.per = period{unit: unitAll, ref: now}
-	app.list.refresh(app.frames, time.Monday)
+	// The frame list, not the summary the app opens on: the tests built on this
+	// fixture ask about frame rows — the ID column, the day header's total, the
+	// widest row there is. The sweeps that have to hold in both views flip the
+	// flag themselves and refresh again; see TestViewNeverExceedsWidth.
+	app.list.compact = false
+	app.list.refresh(app.frames, time.Monday, app.state, app.now)
 	app.form = newFormModel(&app.frames[0], app.frames, now)
 	app.start = newStartModel(app.frames)
 	app.report = newReportModel(now, time.Monday)
@@ -71,6 +76,10 @@ func TestViewHasHeaderBodyFooter(t *testing.T) {
 
 // TestViewNeverExceedsWidth: no line of any mode may be wider than the
 // terminal — the whole point of the layout arithmetic.
+//
+// Both list views, because they lay their rows out by different arithmetic —
+// the frame list negotiates columns, the summary indents and right-aligns — and
+// the one a user meets first is the summary.
 func TestViewNeverExceedsWidth(t *testing.T) {
 	now := time.Now()
 	frames := []watson.Frame{
@@ -80,11 +89,16 @@ func TestViewNeverExceedsWidth(t *testing.T) {
 	for _, width := range chromeWidths {
 		for _, height := range chromeHeights {
 			for _, m := range chromeModes {
-				app := chromeApp(t, now, width, height, frames)
-				app.mode = m
-				for i, line := range strings.Split(app.View(), "\n") {
-					if w := lipgloss.Width(line); w > width {
-						t.Errorf("mode %d at %dx%d: line %d is %d wide: %q", m, width, height, i, w, line)
+				for _, compact := range []bool{false, true} {
+					app := chromeApp(t, now, width, height, frames)
+					app.mode = m
+					app.list.compact = compact
+					app.list.refresh(app.frames, time.Monday, app.state, app.now)
+					for i, line := range strings.Split(app.View(), "\n") {
+						if w := lipgloss.Width(line); w > width {
+							t.Errorf("mode %d, compact %v at %dx%d: line %d is %d wide: %q",
+								m, compact, width, height, i, w, line)
+						}
 					}
 				}
 			}
@@ -106,10 +120,15 @@ func TestViewBudgetsHeight(t *testing.T) {
 	for _, width := range chromeWidths {
 		for _, height := range chromeHeights {
 			for _, m := range chromeModes {
-				app := chromeApp(t, now, width, height, frames)
-				app.mode = m
-				if lines := strings.Count(app.View(), "\n") + 1; lines > height {
-					t.Errorf("mode %d at %dx%d: view has %d lines", m, width, height, lines)
+				for _, compact := range []bool{false, true} {
+					app := chromeApp(t, now, width, height, frames)
+					app.mode = m
+					app.list.compact = compact
+					app.list.refresh(app.frames, time.Monday, app.state, app.now)
+					if lines := strings.Count(app.View(), "\n") + 1; lines > height {
+						t.Errorf("mode %d, compact %v at %dx%d: view has %d lines",
+							m, compact, width, height, lines)
+					}
 				}
 			}
 		}
@@ -498,6 +517,11 @@ func TestSumFieldMatchesTheListAndFlagsTheTimer(t *testing.T) {
 // "3h 00m" above day totals adding up to "1h 00m", which reads as a bug in the
 // day totals. The filtered case is the one that used to disagree; the plain one
 // is here so a sum field that always returns zero cannot pass.
+//
+// Both list views: each draws its own day headers, and after f the sum stands
+// above a different set of them. The running timer is what makes the two views
+// count differently, and it has a test of its own —
+// TestSummaryHeaderTotalCountsWhatTheDayBlocksCount, below.
 func TestHeaderSumAddsUpToTheDayTotals(t *testing.T) {
 	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
 	app := newTestApp(t)
@@ -510,26 +534,86 @@ func TestHeaderSumAddsUpToTheDayTotals(t *testing.T) {
 	}
 	app.list.per = period{unit: unitAll, ref: now}
 
-	for _, filter := range []string{"", "schnaq"} {
-		app.list.filter = filter
-		app.list.refresh(app.frames, app.cfg.WeekStart)
-		var days time.Duration
-		for _, r := range app.list.rows {
-			if r.kind == rowDayHeader {
-				days += r.total
+	for _, compact := range []bool{false, true} {
+		for _, filter := range []string{"", "schnaq"} {
+			app.list.compact = compact
+			app.list.filter = filter
+			app.list.refresh(app.frames, app.cfg.WeekStart, app.state, app.now)
+			var days time.Duration
+			for _, r := range app.list.rows {
+				if r.kind == rowDayHeader {
+					days += r.total
+				}
+			}
+			// The rendered header, not the sum field: the list narrows the frames at the
+			// call site, and the constraint is about what the user reads.
+			// Equality, not Contains: "1h 00m" is a substring of "11h 00m", so a
+			// header that counted too much would pass a contains-check.
+			got, ok := headerFieldByLabel(app.headerFields(), "Total")
+			if !ok {
+				t.Fatalf("compact %v, filter %q: the list header has no Total field", compact, filter)
+			}
+			if want := formatDuration(days); got != want {
+				t.Errorf("compact %v, filter %q: header sum %q, day totals %q",
+					compact, filter, got, want)
 			}
 		}
-		// The rendered header, not the sum field: the list narrows the frames at the
-		// call site, and the constraint is about what the user reads.
-		// Equality, not Contains: "1h 00m" is a substring of "11h 00m", so a
-		// header that counted too much would pass a contains-check.
-		got, ok := headerFieldByLabel(app.headerFields(), "Total")
-		if !ok {
-			t.Fatalf("filter %q: the list header has no Total field", filter)
+	}
+}
+
+// TestSummaryHeaderTotalCountsWhatTheDayBlocksCount: the same constraint one
+// view further on, and the case the frame list never had. The summary folds the
+// running timer into its day totals — that is what makes it agree with the
+// report and the overview — so the Total above them has to count it too, and
+// must not carry the "+ running" flag that says it did not.
+//
+// The combination this pins out is the one app.go's two sum fields exist to make
+// unwritable: a flag reading "not counted" over a number that counts it, above
+// day blocks that also count it. Everything else in the suite misses it, because
+// newTestApp opens on an empty directory and chromeApp sets its state after the
+// refresh — so a.state is nil wherever the header is measured. Here it is set
+// before the rows are built, the way reload() does it in production.
+func TestSummaryHeaderTotalCountsWhatTheDayBlocksCount(t *testing.T) {
+	now := time.Date(2026, 7, 22, 15, 0, 0, 0, time.Local)
+	app := newTestApp(t)
+	app.now = now
+	app.frames = []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "schnaq",
+			time.Date(2026, 7, 22, 9, 0, 0, 0, time.Local), 2*time.Hour),
+	}
+	app.state = &watson.State{Project: "kunde-a", Start: now.Add(-time.Hour), Tags: []string{}}
+	app.list.per = period{unit: unitDay, ref: now}
+	app.list.refresh(app.frames, app.cfg.WeekStart, app.state, app.now)
+
+	var days time.Duration
+	for _, r := range app.list.rows {
+		if r.kind == rowDayHeader {
+			days += r.total
 		}
-		if want := formatDuration(days); got != want {
-			t.Errorf("filter %q: header sum %q, day totals %q", filter, got, want)
-		}
+	}
+	if days != 3*time.Hour {
+		t.Fatalf("the fixture's day totals are %v, want 3h — two booked plus one running", days)
+	}
+	got, ok := headerFieldByLabel(app.headerFields(), "Total")
+	if !ok {
+		t.Fatal("the summary header has no Total field")
+	}
+	if want := formatDuration(days); got != want {
+		t.Errorf("summary header Total %q, day blocks %q", got, want)
+	}
+	if strings.Contains(got, "running") {
+		t.Errorf("Total %q flags the timer as uncounted while the day blocks count it", got)
+	}
+
+	// The neighbours are read against that Total, so they count the timer too —
+	// otherwise the week containing today comes out smaller than today.
+	week, ok := headerFieldByLabel(app.headerFields(), "Week")
+	if !ok {
+		t.Fatal("the summary header has no Week field")
+	}
+	if want := formatDuration(3 * time.Hour); week != want {
+		t.Errorf("Week = %q, want %q — the neighbour must count the timer as the Total does",
+			week, want)
 	}
 }
 
@@ -709,7 +793,7 @@ func TestComparisonRowFollowsTheListFilter(t *testing.T) {
 	}
 	for _, tc := range cases {
 		app.list.filter = tc.filter
-		app.list.refresh(app.frames, app.cfg.WeekStart)
+		app.list.refresh(app.frames, app.cfg.WeekStart, app.state, app.now)
 		fields := app.headerFields()
 		for _, want := range []struct{ label, value string }{
 			{"Prev week", tc.prevWeek}, {"Month", tc.month},
@@ -787,7 +871,7 @@ func TestViewDropsComparisonRowBeforeTheFrame(t *testing.T) {
 			time.Date(2026, 7, 14, 9, 0, 0, 0, time.Local), 5*time.Hour),
 	}
 	app.list.per = period{unit: unitWeek, ref: now}
-	app.list.refresh(app.frames, time.Monday)
+	app.list.refresh(app.frames, time.Monday, app.state, app.now)
 
 	app.Update(tea.WindowSizeMsg{Width: 100, Height: 26})
 	if !strings.Contains(app.View(), "Prev week") {

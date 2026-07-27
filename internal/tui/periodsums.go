@@ -8,9 +8,29 @@ import (
 	"github.com/schnaq/watson-tui/internal/watson"
 )
 
-// sumInPeriod adds the duration of every frame that begins inside p. A frame
+// framesInPeriod narrows frames to the ones that begin inside p. A frame
 // belongs entirely to the period it starts in — the same rule buildRows,
-// aggregate and buildOverview follow, so all four agree.
+// aggregate and buildOverview follow, so all of them agree.
+//
+// An unbounded period hands the slice straight back rather than copying it: the
+// a (all) period selects everything, and the header calls this on every render.
+func framesInPeriod(frames []watson.Frame, p period, weekStart time.Weekday) []watson.Frame {
+	from, to, bounded := p.bounds(weekStart)
+	if !bounded {
+		return frames
+	}
+	var sel []watson.Frame
+	for _, f := range frames {
+		if !f.Start.Before(from) && f.Start.Before(to) {
+			sel = append(sel, f)
+		}
+	}
+	return sel
+}
+
+// sumInPeriod adds the duration of every frame that begins inside p. Spelled
+// out here rather than over framesInPeriod's result, so that summing a period
+// allocates nothing — the header sums three of them on every tick.
 func sumInPeriod(frames []watson.Frame, p period, weekStart time.Weekday) time.Duration {
 	from, to, bounded := p.bounds(weekStart)
 	var total time.Duration

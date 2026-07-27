@@ -43,7 +43,8 @@ func TestListKeepsColumnsAlignedPastNinetyNineHours(t *testing.T) {
 	frames := wideAndNarrowFrames(day)
 	l := newListModel(day, time.Monday)
 	l.per = period{unit: unitAll, ref: day}
-	l.refresh(frames, time.Monday)
+	l.compact = false // this file is the frame list's half of the width rule
+	l.refresh(frames, time.Monday, nil, time.Time{})
 	// No row is the cursor row, so nothing is styled and the assertions can count
 	// columns in the plain line instead of stepping over escape sequences.
 	l.cursor = -1
@@ -141,7 +142,8 @@ func TestListNeverShowsAPartialFrameID(t *testing.T) {
 	frames := wideAndNarrowFrames(day)
 	l := newListModel(day, time.Monday)
 	l.per = period{unit: unitAll, ref: day}
-	l.refresh(frames, time.Monday)
+	l.compact = false // this file is the frame list's half of the width rule
+	l.refresh(frames, time.Monday, nil, time.Time{})
 
 	for width := 20; width <= 140; width++ {
 		body := l.view(len(l.rows), width)
@@ -224,7 +226,8 @@ func TestListLastResortCutsTheNumberVisibly(t *testing.T) {
 	day := time.Date(2026, 7, 21, 9, 0, 0, 0, time.Local)
 	l := newListModel(day, time.Monday)
 	l.per = period{unit: unitAll, ref: day}
-	l.refresh(wideAndNarrowFrames(day), time.Monday)
+	l.compact = false // this file is the frame list's half of the width rule
+	l.refresh(wideAndNarrowFrames(day), time.Monday, nil, time.Time{})
 	l.cursor = -1
 	const durW = 8 // "130h 00m", the widest duration in the fixture
 
@@ -254,7 +257,8 @@ func TestListKeepsTheDayTotalWhole(t *testing.T) {
 	frames := wideAndNarrowFrames(day)
 	l := newListModel(day, time.Monday)
 	l.per = period{unit: unitAll, ref: day}
-	l.refresh(frames, time.Monday)
+	l.compact = false // this file is the frame list's half of the width rule
+	l.refresh(frames, time.Monday, nil, time.Time{})
 	total := formatDuration(130*time.Hour + 30*time.Minute)
 
 	for width := 20; width <= 140; width++ {

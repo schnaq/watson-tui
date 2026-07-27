@@ -4,17 +4,17 @@
 │                                                                                                  │
 │                                                                                         no timer │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
-╭─ Summary ────────────────────────────────────────────────────────────────────────────────────────╮
-│ Tuesday, 2026-07-21 —                                                                     6h 30m │
-│ ▌ kunde-a —                                                                               4h 00m │
-│       [meeting                                                                           4h 00m] │
+╭─ Frames ─────────────────────────────────────────────────────────────────────────────────────────╮
+│ Tuesday, 2026-07-21 — 6h 30m                                                                     │
+│ ▌ 09:00–11:30  2h 30m  schnaq                   dev                          a111111             │
+│   13:00–17:00  4h 00m  kunde-a                  meeting                      b222222             │
+│ Wednesday, 2026-07-22 — 3h 15m                                                                   │
+│   10:00–13:15  3h 15m  kunde-b                  call                         c333333             │
 │                                                                                                  │
-│   schnaq —                                                                                2h 30m │
-│       [dev                                                                               2h 30m] │
 │                                                                                                  │
-│ Wednesday, 2026-07-22 —                                                                   3h 15m │
-│   kunde-b —                                                                               3h 15m │
-│       [call                                                                              3h 15m] │
+│                                                                                                  │
+│                                                                                                  │
+│                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
 │                                                                                                  │
@@ -27,4 +27,4 @@
 │                                                                                                  │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────╯
  j/k move · ← → period · t/w/m/a day/week/month/all
- n new · ? help · q quit · f frames · s timer · / filter · r report · o overview · R reload
+ enter edit · n new · ? help · q quit · f summary · d delete · s timer · / filter · r report

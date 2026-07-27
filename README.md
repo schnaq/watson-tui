@@ -21,14 +21,18 @@ grab the matching archive from a
 
 ## Usage
 
-Start `watson-tui` — it opens on the current week.
+Start `watson-tui` — it opens on the current week, as a summary: one block per
+day, the projects worked on that day and, under each, its tags. That is the
+question one opens a time tracker with. The individual sessions are one key
+away: `f` switches to the frame list and back.
 
 | Key | Action |
 |---|---|
-| `j`/`k` | move |
-| `enter` | edit frame |
+| `j`/`k` | move (project rows in the summary, frames in the list) |
+| `f` | summary ⇄ frame list |
+| `enter` | edit frame (frame list only) |
 | `n` | new frame |
-| `d` | delete frame |
+| `d` | delete frame (frame list only) |
 | `s` | start/stop timer |
 | `S` | discard timer |
 | `/` | filter (project, tag, ID) |
@@ -45,10 +49,12 @@ and `→` shift it (`[` and `]` do the same) — plus that period's total, a
 comparison against the previous period and the next larger one (for a week,
 that is the previous week and the month), the number of frames and projects,
 and any running timer. `all frames` cannot be shifted, so it gets neither
-angles nor a comparison. The list header's total matches the list below it and
-therefore leaves a running timer out; when `+ running` follows it, that is exactly
-why the report and the overview show more for the same period — their headers
-count it, because their tables do too.
+angles nor a comparison. The header's total always matches the body underneath
+it, so which of the two views you are in decides what it counts: the frame list
+shows recorded frames, so its total leaves a running timer out and writes
+`+ running` after it — that is exactly why the report and the overview show more
+for the same period. The summary's day blocks count a running timer up to now,
+like the report, so its total counts it too and carries no such flag.
 
 The interface uses your terminal theme's ANSI colours: context header on top,
 framed main panel, key hints at the bottom. The chrome hands its space back to
@@ -71,6 +77,12 @@ would match several frames — or the wrong one. You always get the full ID in t
 edit dialog (`enter`) and in the delete prompt (`d`). The exact thresholds
 depend on the widest duration in the list — `130h 00m` needs one column more
 than `6h 30m`.
+
+The summary follows the same rule with less to negotiate: it has one elastic
+column, and on a narrow terminal the day, project or tag name is shortened with
+`…` while its duration stays whole and right-aligned. Days without a recorded
+frame are shown, with `–` instead of `0m`, so a gap in the week is visible
+rather than merely absent.
 
 Data directory: `$WATSON_DIR`, otherwise the OS default (macOS:
 `~/Library/Application Support/watson`). Override with `--dir PATH`.
@@ -96,9 +108,10 @@ from it:
   31 July 23:00 to 1 August 02:00 therefore counts three hours towards July,
   not split across the two. Watson itself does the same.
 - A running timer counts up to now and is called out below the table — in the
-  overview and the report alike, and in their header totals as well. Only the
-  frame list leaves it out of its header total, so that total still adds up to
-  the day totals below it, and writes `+ running` after it.
+  overview and the report alike, and in the summary's day blocks and header
+  total too. Only the frame list leaves it out, because it lists recorded
+  frames and nothing else; its header total therefore still adds up to the day
+  totals below it, and writes `+ running` after itself.
 - Everything is based on your local time zone; the week start comes from
   Watson's `config` (`[options] week_start`, Monday by default).
 

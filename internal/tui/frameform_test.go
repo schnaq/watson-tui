@@ -96,6 +96,7 @@ func TestEditFlowChangesProject(t *testing.T) {
 	app.Init()
 	app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	app.Update(key("a")) // period "all", independent of week boundaries
+	app.Update(key("f")) // enter edits a frame, and only the frame list selects one
 	app.Update(key("enter"))
 	if app.mode != modeForm || !app.form.editing {
 		t.Fatal("enter must open the edit form")

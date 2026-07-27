@@ -87,7 +87,8 @@ func TestListNavigationSkipsHeaders(t *testing.T) {
 		mkFrame("b2222222222222222222222222222222", "beta", now.Add(-2*time.Hour), time.Hour),
 	}
 	app.list.per = period{unit: unitAll, ref: now}
-	app.list.refresh(app.frames, time.Monday)
+	app.list.compact = false // selected() names a frame, and only the frame list has one
+	app.list.refresh(app.frames, time.Monday, app.state, app.now)
 	if f, ok := app.list.selected(); !ok || f.Project != "alpha" {
 		t.Fatalf("initial selection: %+v", f)
 	}
@@ -113,7 +114,8 @@ func TestFilterKeyFlow(t *testing.T) {
 		mkFrame("b2222222222222222222222222222222", "beta", now.Add(-4*time.Hour), time.Hour),
 	}
 	app.list.per = period{unit: unitAll, ref: now}
-	app.list.refresh(app.frames, time.Monday)
+	app.list.compact = false // selected() names a frame, and only the frame list has one
+	app.list.refresh(app.frames, time.Monday, app.state, app.now)
 	app.Update(key("/"))
 	if !app.list.filtering {
 		t.Fatal("/ must enter filter mode")

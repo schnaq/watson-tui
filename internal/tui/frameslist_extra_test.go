@@ -156,7 +156,7 @@ func TestHeaderFieldsListBranches(t *testing.T) {
 	app := newTestApp(t)
 	app.mode = modeList
 	app.list.per = period{unit: unitAll, ref: time.Now()}
-	app.list.refresh(app.frames, time.Monday)
+	app.list.refresh(app.frames, time.Monday, app.state, app.now)
 
 	// "0 frames", not "Frames 0": the count shares its row with the number of
 	// projects, so it carries its own unit instead of a label.
@@ -186,9 +186,10 @@ func TestListViewRendersRows(t *testing.T) {
 	day := time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local) // Monday
 	l := newListModel(day, time.Monday)
 	l.per = period{unit: unitWeek, ref: day}
+	l.compact = false // the frame list, which is what this test reads back
 	l.refresh([]watson.Frame{
 		mkFrame("a1111111111111111111111111111111", "alpha", day, time.Hour, "tag1"),
-	}, time.Monday)
+	}, time.Monday, nil, time.Time{})
 	out := l.view(10, 80)
 	if !strings.Contains(out, "alpha") {
 		t.Errorf("view missing project: %q", out)

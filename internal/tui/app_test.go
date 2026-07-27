@@ -95,7 +95,7 @@ func TestHelpToggle(t *testing.T) {
 	}
 	// The panel title names the view; the body is the key list itself.
 	out := app.View()
-	if !strings.Contains(out, panelTitle(modeHelp)) {
+	if !strings.Contains(out, panelTitle(modeHelp, app.list.compact)) {
 		t.Errorf("help panel missing its title:\n%s", out)
 	}
 	if !strings.Contains(out, "new frame") {
@@ -151,6 +151,7 @@ func TestDeleteFlowWithConfirm(t *testing.T) {
 	app.Init()
 	app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	app.Update(key("a"))
+	app.Update(key("f")) // the summary has no frame to delete; f reaches the frame list
 	app.Update(key("d"))
 	if app.mode != modeConfirmDelete || app.pendingDelete.ID != added.ID {
 		t.Fatal("d must ask for confirmation")

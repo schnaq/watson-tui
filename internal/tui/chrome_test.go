@@ -156,7 +156,7 @@ func TestFooterMergesGroupsWhenOnlyOneLineFits(t *testing.T) {
 // — the two keys one cannot look up once they are gone. The real hints, at the
 // widths a short terminal actually has.
 func TestMergedHintsKeepThePeriodAndTheExits(t *testing.T) {
-	merged := [][]string{mergeHints(footerHints(modeList))}
+	merged := [][]string{mergeHints(footerHints(modeList, false))}
 	for _, c := range []struct {
 		width int
 		wants []string
@@ -177,10 +177,10 @@ func TestMergedHintsKeepThePeriodAndTheExits(t *testing.T) {
 	}
 	// Nothing is dropped by the merge itself — shedHints decides what fits.
 	var n int
-	for _, g := range footerHints(modeList) {
+	for _, g := range footerHints(modeList, false) {
 		n += len(g)
 	}
-	if got := len(mergeHints(footerHints(modeList))); got != n {
+	if got := len(mergeHints(footerHints(modeList, false))); got != n {
 		t.Errorf("merge kept %d of %d hints; it may reorder, not drop", got, n)
 	}
 }
@@ -202,7 +202,7 @@ func TestFooterErrorStillReplacesEverything(t *testing.T) {
 
 // TestFooterHintsListPeriodKeys: the gap that started this change.
 func TestFooterHintsListPeriodKeys(t *testing.T) {
-	groups := footerHints(modeList)
+	groups := footerHints(modeList, false)
 	if len(groups) != 2 {
 		t.Fatalf("list hints must come in two groups, got %d", len(groups))
 	}
@@ -221,7 +221,7 @@ func TestFooterHintsListPeriodKeys(t *testing.T) {
 // TestFooterKeepsPeriodAndExitsAt80: shedding must not eat the keys a user
 // cannot otherwise find.
 func TestFooterKeepsPeriodAndExitsAt80(t *testing.T) {
-	groups := footerHints(modeList)
+	groups := footerHints(modeList, false)
 	first := renderFooter(80, groups[:1], "")
 	if !strings.Contains(first, "← →") {
 		t.Errorf("period hint gone at 80 columns: %q", first)
@@ -252,7 +252,7 @@ func TestFooterMeasuresBeforeStyling(t *testing.T) {
 		}
 		return n
 	}
-	groups := footerHints(modeList)
+	groups := footerHints(modeList, false)
 	widths := []int{40, 60, 80, 100, 140}
 	plain := make(map[int]int, len(widths))
 	for _, width := range widths {
@@ -282,12 +282,16 @@ func TestFooterMeasuresBeforeStyling(t *testing.T) {
 }
 
 // TestFooterStaysInsideWidth: the footer is one line next to the status bar, so
-// it must not wrap on a narrow terminal either.
+// it must not wrap on a narrow terminal either. Both view states, because the
+// summary and the frame list hand out different strings and the summary is the
+// one a user opens on.
 func TestFooterStaysInsideWidth(t *testing.T) {
-	for width := 0; width <= 20; width++ {
-		out := renderFooter(width, footerHints(modeList), "")
-		if w := lipgloss.Width(out); w > width {
-			t.Errorf("width %d: footer is %d wide: %q", width, w, out)
+	for _, compact := range []bool{false, true} {
+		for width := 0; width <= 20; width++ {
+			out := renderFooter(width, footerHints(modeList, compact), "")
+			if w := lipgloss.Width(out); w > width {
+				t.Errorf("compact %v, width %d: footer is %d wide: %q", compact, width, w, out)
+			}
 		}
 	}
 }
@@ -307,7 +311,7 @@ func TestFooterHintsPerMode(t *testing.T) {
 	}
 	for m, wants := range cases {
 		var flat []string
-		for _, g := range footerHints(m) {
+		for _, g := range footerHints(m, false) {
 			flat = append(flat, g...)
 		}
 		got := strings.Join(flat, hintSep)
@@ -589,48 +593,64 @@ func TestSpreadKeepsTheRightFieldRight(t *testing.T) {
 	}
 }
 
-// TestFooterShedsWholeHints: the list hints are 50 and 103 columns, so on any
-// normal terminal some have to go. They go from the tail and they go whole — a
-// footer ending in "q qu" or a dangling separator is worse than one hint fewer.
+// TestFooterShedsWholeHints: the list hints are 50 and 115 columns in the frame
+// list, 50 and 90 in the summary, so on any normal terminal some have to go.
+// They go from the tail and they go whole — a footer ending in "q qu" or a
+// dangling separator is worse than one hint fewer.
 //
-// Both numbers are asserted, not just recited. shedHints's doc quotes the 103
-// as the reason it exists, and that figure has gone stale twice already — it
-// said 116 while the hints measured 109, and it still said 116 while the
-// English sweep brought them down to 103. A number a comment leans on is worth
-// a line of test; when this fails, fix the two comments rather than the number.
+// Both numbers are asserted, not just recited. shedHints's doc quotes the frame
+// list's 115 as the reason it exists, and that figure has gone stale twice
+// already — it said 116 while the hints measured 109, and it still said 116
+// while the English sweep brought them down to 103, which "f summary" then took
+// to 115. A number a comment leans on is worth a line of test; when this fails,
+// fix the two comments rather than the number.
+//
+// Swept over both view states: the summary is what watson-tui opens on, and its
+// second group is a different set of strings, so the frame list's numbers say
+// nothing about the footer a user actually meets first.
 func TestFooterShedsWholeHints(t *testing.T) {
-	groups := footerHints(modeList)
-	for i, want := range []int{50, 103} {
-		if got := lipgloss.Width(strings.Join(groups[i], hintSep)); got != want {
-			t.Errorf("list hint group %d is %d columns, the comments here and on "+
-				"shedHints say %d", i, got, want)
-		}
-	}
-	whole := map[string]bool{}
-	for _, g := range groups {
-		for _, h := range g {
-			whole[h] = true
-		}
-	}
-	for width := 0; width <= 140; width++ {
-		out := renderFooter(width, groups, "")
-		if w := lipgloss.Width(out); w > width {
-			t.Errorf("width %d: footer is %d wide: %q", width, w, out)
-		}
-		for _, line := range strings.Split(out, "\n") {
-			body := strings.TrimSpace(line)
-			if body == "" {
-				continue
+	for _, tc := range []struct {
+		compact bool
+		widths  [2]int
+	}{
+		{false, [2]int{50, 115}},
+		{true, [2]int{50, 90}},
+	} {
+		groups := footerHints(modeList, tc.compact)
+		for i, want := range tc.widths {
+			if got := lipgloss.Width(strings.Join(groups[i], hintSep)); got != want {
+				t.Errorf("compact %v: list hint group %d is %d columns, the comments here "+
+					"and on shedHints say %d", tc.compact, i, got, want)
 			}
-			if strings.Contains(body, "…") {
-				t.Errorf("width %d: a hint was cut instead of dropped: %q", width, line)
+		}
+		whole := map[string]bool{}
+		for _, g := range groups {
+			for _, h := range g {
+				whole[h] = true
 			}
-			if strings.HasPrefix(body, "·") || strings.HasSuffix(body, "·") {
-				t.Errorf("width %d: dangling separator: %q", width, line)
+		}
+		for width := 0; width <= 140; width++ {
+			out := renderFooter(width, groups, "")
+			if w := lipgloss.Width(out); w > width {
+				t.Errorf("compact %v, width %d: footer is %d wide: %q", tc.compact, width, w, out)
 			}
-			for _, part := range strings.Split(body, hintSep) {
-				if !whole[part] {
-					t.Errorf("width %d: %q is not a whole hint of %v", width, part, groups)
+			for _, line := range strings.Split(out, "\n") {
+				body := strings.TrimSpace(line)
+				if body == "" {
+					continue
+				}
+				if strings.Contains(body, "…") {
+					t.Errorf("compact %v, width %d: a hint was cut instead of dropped: %q",
+						tc.compact, width, line)
+				}
+				if strings.HasPrefix(body, "·") || strings.HasSuffix(body, "·") {
+					t.Errorf("compact %v, width %d: dangling separator: %q", tc.compact, width, line)
+				}
+				for _, part := range strings.Split(body, hintSep) {
+					if !whole[part] {
+						t.Errorf("compact %v, width %d: %q is not a whole hint of %v",
+							tc.compact, width, part, groups)
+					}
 				}
 			}
 		}
@@ -641,13 +661,16 @@ func TestFooterShedsWholeHints(t *testing.T) {
 // used to be cut off, and the two keys that were cut first were the two that
 // must never become undiscoverable. They now come before the keys the help
 // screen can still teach, so both survive the narrowest terminal this UI
-// targets.
+// targets — in either view, since a user who never presses f sees only the
+// summary's footer.
 func TestFooterKeepsHelpAndQuitAt80(t *testing.T) {
-	for _, width := range []int{80, 100, 120} {
-		out := renderFooter(width, footerHints(modeList), "")
-		for _, want := range []string{"? help", "q quit"} {
-			if !strings.Contains(out, want) {
-				t.Errorf("width %d: footer lost %q: %q", width, want, out)
+	for _, compact := range []bool{false, true} {
+		for _, width := range []int{80, 100, 120} {
+			out := renderFooter(width, footerHints(modeList, compact), "")
+			for _, want := range []string{"? help", "q quit"} {
+				if !strings.Contains(out, want) {
+					t.Errorf("compact %v, width %d: footer lost %q: %q", compact, width, want, out)
+				}
 			}
 		}
 	}
@@ -695,15 +718,17 @@ func TestStyleHintAccentsOnlyRealKeys(t *testing.T) {
 	// rewording that leaves an entry unused fails here rather than rotting.
 	seen := map[string]bool{}
 	for m := modeList; m <= modeOverview; m++ {
-		for _, g := range footerHints(m) {
-			for _, h := range g {
-				word := strings.SplitN(h, " ", 2)[0]
-				if !keylessLead[word] {
-					continue
-				}
-				seen[word] = true
-				if got, want := styleHint(h), styleDim.Render(h); got != want {
-					t.Errorf("mode %d: %q must be dimmed whole:\n got %q\nwant %q", m, h, got, want)
+		for _, compact := range []bool{false, true} {
+			for _, g := range footerHints(m, compact) {
+				for _, h := range g {
+					word := strings.SplitN(h, " ", 2)[0]
+					if !keylessLead[word] {
+						continue
+					}
+					seen[word] = true
+					if got, want := styleHint(h), styleDim.Render(h); got != want {
+						t.Errorf("mode %d: %q must be dimmed whole:\n got %q\nwant %q", m, h, got, want)
+					}
 				}
 			}
 		}
@@ -729,19 +754,19 @@ func TestStyleHintAccentsOnlyRealKeys(t *testing.T) {
 // asserted absent.
 func TestFooterHintsAreEnglish(t *testing.T) {
 	have := map[string]bool{}
-	for _, g := range footerHints(modeList) {
+	for _, g := range footerHints(modeList, false) {
 		for _, h := range g {
 			have[h] = true
 		}
 	}
 	for _, want := range []string{"enter edit", "/ filter"} {
 		if !have[want] {
-			t.Errorf("list hints lost the English hint %q: %v", want, footerHints(modeList))
+			t.Errorf("list hints lost the English hint %q: %v", want, footerHints(modeList, false))
 		}
 	}
 	for _, unwanted := range []string{"enter bearbeiten", "/ filtern"} {
 		if have[unwanted] {
-			t.Errorf("list hints went back to German with %q: %v", unwanted, footerHints(modeList))
+			t.Errorf("list hints went back to German with %q: %v", unwanted, footerHints(modeList, false))
 		}
 	}
 }

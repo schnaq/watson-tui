@@ -250,10 +250,15 @@ func truncate(s string, max int) string {
 }
 
 type listModel struct {
-	rows        []row
-	cursor      int // index into rows; always on a frame row; -1 when empty
-	offset      int // first visible row
-	per         period
+	rows   []row
+	cursor int // index into rows; always on a selectable row; -1 when empty
+	offset int // first visible row
+	per    period
+	// compact selects which view the rows are built for: the summary's day
+	// blocks or the frame list. The summary is what watson-tui opens on — the
+	// question one starts with is "what did I work on", and the individual
+	// frames only matter when one of them is being edited. f switches.
+	compact     bool
 	filter      string
 	filtering   bool
 	filterInput textinput.Model
@@ -269,17 +274,28 @@ func newListModel(now time.Time, weekStart time.Weekday) listModel {
 	return listModel{
 		per:         period{unit: unitWeek, ref: now}.shift(weekStart, 0),
 		cursor:      -1,
+		compact:     true,
 		filterInput: ti,
 	}
 }
 
 // refresh rebuilds rows and keeps the selection on the same frame if possible.
-func (l *listModel) refresh(frames []watson.Frame, weekStart time.Weekday) {
+//
+// state and now are the summary's, not the list's: its day blocks count a
+// running timer up to now, the way the report and the overview do, so the rows
+// cannot be built without them. The frame list ignores both — a running frame
+// has no ID to edit and no stop time to show.
+func (l *listModel) refresh(frames []watson.Frame, weekStart time.Weekday,
+	state *watson.State, now time.Time) {
 	prevID := ""
 	if f, ok := l.selected(); ok {
 		prevID = f.ID
 	}
-	l.rows = buildRows(frames, l.per, weekStart, l.filter)
+	if l.compact {
+		l.rows = buildSummaryRows(frames, l.per, weekStart, l.filter, state, now)
+	} else {
+		l.rows = buildRows(frames, l.per, weekStart, l.filter)
+	}
 	l.cursor = firstFrameRow(l.rows)
 	if prevID != "" {
 		for i, r := range l.rows {
@@ -445,10 +461,16 @@ func (l *listModel) view(height, width int) string {
 //
 // Computed over every frame row of the list, not only the visible ones, so
 // scrolling does not move the columns under the reader.
+//
+// Frame rows only, and named as such rather than "everything that is not a day
+// header": the summary's project, tag and blank rows carry no frame, so they
+// would each measure the zero frame's "0m" and size a column no row of theirs
+// uses. Harmless today — 2 is never the widest — but it is the kind of measure
+// that comes out wrong the moment a kind is added.
 func listDurWidth(rows []row) int {
 	w := 0
 	for _, r := range rows {
-		if r.kind == rowDayHeader {
+		if r.kind != rowFrame {
 			continue
 		}
 		w = max(w, len(formatDuration(r.frame.Duration())))
@@ -481,10 +503,49 @@ func dayHeaderLine(day string, total time.Duration, width int) string {
 // column sized to durW for the whole list. The layout is negotiated per row
 // rather than handed down, because it is arithmetic on two numbers that are the
 // same for every row — which is also what keeps the columns of the rows aligned.
+//
+// Every kind is spelled out. It used to render anything that was not a day
+// header as a frame, which held while those were the only two kinds; the
+// summary's project and tag rows would have come out as "00:00–00:00" with an
+// empty name, because watson.Frame{}.Duration() is guarded and the zero frame
+// renders rather than panics — the worst way for a missing case to fail.
 func (l *listModel) renderRow(i, width, durW int) string {
 	r := l.rows[i]
-	if r.kind == rowDayHeader {
+	switch r.kind {
+	case rowBlank:
+		return ""
+	case rowDayHeader:
+		if l.compact {
+			// The summary puts every number in one right-hand column, so its day
+			// header is laid out like the rows below it rather than with the frame
+			// list's " — " join. An empty day reads as a dash: "0m" invites the
+			// question whether nothing was booked or nothing is known — the same
+			// answer the overview's cells and the header's comparison row give.
+			total := "–"
+			if r.total > 0 {
+				total = formatDuration(r.total)
+			}
+			return styleDayHeader.Render(summaryLine(r.title+" —", total, 0, width))
+		}
 		return styleDayHeader.Render(dayHeaderLine(r.title, r.total, width))
+	case rowProject:
+		line := summaryLine(r.title+" —", formatDuration(r.total), summaryProjectIndent, width)
+		if i == l.cursor {
+			// The marker replaces the first column of the indent instead of being
+			// prepended, so the line keeps its width and the numbers stay in their
+			// column on the cursor row too.
+			return styleSelected.Render(selectionMarker + line[1:])
+		}
+		return line
+	case rowTag:
+		// The bracket encloses the tag and its number both: "[docs      42m]". The
+		// number is right-aligned inside it, which puts it one column left of the
+		// project and day totals — deliberate, so that a tag line reads as a
+		// breakdown of the row above it rather than as another row of the same
+		// kind. report.go brackets only the tag and lines its numbers up with the
+		// projects', because there they are one column, not two.
+		return styleDim.Render(summaryLine("["+r.title, formatDuration(r.total)+"]",
+			summaryTagIndent, width))
 	}
 	fr := r.frame
 	rl := listLayout(width, durW)

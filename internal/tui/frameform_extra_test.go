@@ -120,6 +120,7 @@ func TestEditRoundTripKeepsSeconds(t *testing.T) {
 	app.Init()
 	app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	app.Update(key("a")) // period "all"
+	app.Update(key("f")) // enter edits a frame, and only the frame list selects one
 	app.Update(key("enter"))
 	if app.mode != modeForm || !app.form.editing {
 		t.Fatal("enter must open the edit form")
@@ -211,7 +212,7 @@ func TestFormView(t *testing.T) {
 	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Frame new") {
 		t.Errorf("header must name the new frame: %q", got)
 	}
-	if got := renderFooter(100, footerHints(modeForm), ""); !strings.Contains(got, "esc cancel") {
+	if got := renderFooter(100, footerHints(modeForm, false), ""); !strings.Contains(got, "esc cancel") {
 		t.Errorf("footer must carry the abort key: %q", got)
 	}
 	out := app.form.view()
