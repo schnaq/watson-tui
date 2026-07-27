@@ -78,8 +78,8 @@ func TestViewHasHeaderBodyFooter(t *testing.T) {
 // terminal — the whole point of the layout arithmetic.
 //
 // Both list views, because they lay their rows out by different arithmetic —
-// the frame list negotiates columns, the summary indents and right-aligns — and
-// the one a user meets first is the summary.
+// the frame list negotiates its columns against the width, the summary sizes two
+// columns from its own rows — and the one a user meets first is the summary.
 func TestViewNeverExceedsWidth(t *testing.T) {
 	now := time.Now()
 	frames := []watson.Frame{

@@ -28,18 +28,18 @@ Der letzte Punkt ist der tragende: Zeitraum-Navigation, Filter, Kopf und Höhenb
 
 ```
 ╭─ Summary ────────────────────────────────────────────────────────────╮
-│ Friday, 2026-07-24 — 6h 20m                                          │
-│ ▌  moneymoney — 3h 43m                                               │
-│       [monitoring  3h 43m]                                           │
-│       [docs           30m]                                           │
+│ Friday, 2026-07-24 —    6h 20m                                       │
+│ ▌ moneymoney —          3h 43m                                       │
+│       [monitoring       3h 43m]                                      │
+│       [docs                30m]                                      │
 │                                                                      │
-│    rheinbahn — 42m                                                   │
-│       [docs           42m]                                           │
+│   rheinbahn —              42m                                       │
+│       [docs                42m]                                      │
 │                                                                      │
-│ Saturday, 2026-07-25 — –                                             │
+│ Saturday, 2026-07-25 —       –                                       │
 │                                                                      │
-│ Monday, 2026-07-27 — 1h 58m                                          │
-│    ewr — 1h 30m                                                      │
+│ Monday, 2026-07-27 —    1h 58m                                       │
+│   ewr —                 1h 30m                                       │
 ╰──────────────────────────────────────────────────────────────────────╯
 ```
 
@@ -50,6 +50,8 @@ Der letzte Punkt ist der tragende: Zeitraum-Navigation, Filter, Kopf und Höhenb
 - **Panel-Titel:** `Summary` statt `Frames`.
 
 **Ausrichtung:** die Dauern stehen in einer Spalte, die sich nach dem längsten Namen der Ansicht richtet — nicht am rechten Rand des Terminals. Auf einem breiten Terminal soll die Zahl neben dem Namen stehen, nicht sechzig Spalten entfernt. `report.go` löst dasselbe Problem bereits mit `reportLayout` und `reportRow`; die Zusammenfassung folgt diesem Muster.
+
+Eine Spalte für alle drei Zeilenarten, Tageszeilen eingeschlossen: eine Zahl, die auf jeder Zeile woanders steht, liest sich schlechter herunter als eine, die weiter rechts steht als nötig. Die Tageszeile ist normalerweise der längste Name, also richtet sich die Spalte in der Regel nach ihr — deshalb die Lücke hinter den kürzeren Projekt- und Tagnamen in der Skizze. Die schließende Klammer der Tagzeile steht direkt hinter der Zahl und damit als einzige Spalte rechts der gemeinsamen Zahlenspalte; genau das lässt die Tagzeile als Aufschlüsselung der Zeile darüber lesen.
 
 Die Zahl gibt nie nach: passt eine Zeile nicht, wird der Projekt- oder Tagname mit `…` gekürzt, nie die Dauer — dieselbe Regel wie in Liste, Report und Übersicht.
 

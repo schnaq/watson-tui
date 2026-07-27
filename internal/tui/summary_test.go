@@ -349,15 +349,16 @@ func TestSummaryNumbersSurviveEveryWidth(t *testing.T) {
 	}
 }
 
-// TestSummaryRowsEndInTheirNumber: every row is laid out to the full width with
-// its own total at the right edge, so the numbers stand in a column instead of
-// trailing their labels.
+// TestSummaryRowsEndInTheirNumber: every row ends in its own total, so nothing
+// stands between the number and the eye running down the column.
 //
 // Two edges, not one, and that is the design: a day header and a project row end
 // in the number itself, a tag row ends in the bracket that closes it, one column
-// further out. The tag line is a breakdown of the row above it and reads as one
-// because of that offset — see renderRow. Both are asserted, so neither the
-// bracket nor the alignment can quietly go.
+// further out. The numbers themselves still line up — see
+// TestSummaryNumbersShareOneColumn — the bracket is the one column a tag row has
+// that the others do not, which is what makes it read as a breakdown of the row
+// above. Both are asserted, so neither the bracket nor the alignment can quietly
+// go.
 func TestSummaryRowsEndInTheirNumber(t *testing.T) {
 	now := time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local)
 	frames := []watson.Frame{
@@ -370,15 +371,16 @@ func TestSummaryRowsEndInTheirNumber(t *testing.T) {
 	l.cursor = -1 // nothing styled, so the columns can be counted in plain text
 
 	const width = 60
+	c := summaryColumns(l.rows, width)
 	seen := map[rowKind]bool{}
 	for i, r := range l.rows {
 		if r.kind == rowBlank {
 			continue
 		}
-		line := l.renderRow(i, width, 0)
+		line := l.renderRow(i, width, c)
 		seen[r.kind] = true
-		if w := lipgloss.Width(line); w != width {
-			t.Errorf("row %d (kind %d) is %d columns, want %d: %q", i, r.kind, w, width, line)
+		if w := lipgloss.Width(line); w > width {
+			t.Errorf("row %d (kind %d) is %d columns, want at most %d: %q", i, r.kind, w, width, line)
 		}
 		// Nothing but the closing bracket may follow the number. A pad after it
 		// would take that row's digits out of the column its neighbours use.
@@ -396,6 +398,154 @@ func TestSummaryRowsEndInTheirNumber(t *testing.T) {
 	for _, k := range []rowKind{rowDayHeader, rowProject, rowTag} {
 		if !seen[k] {
 			t.Errorf("the fixture rendered no row of kind %d", k)
+		}
+	}
+}
+
+// summaryColumn is where one rendered row puts its number and how far that is
+// from the end of its name. The number is right-aligned in its column, so it is
+// the last digit that stands in the same place on every row, not the first.
+type summaryColumn struct {
+	kind   rowKind
+	numEnd int // the column after the number's last digit
+	gap    int // blank columns between the end of the name and the first digit
+}
+
+// summaryColumnsOf renders every non-blank row of l into a body of width columns
+// and reads the two numbers off the rendered line — not off the widths
+// summaryColumns computed, which would only restate the arithmetic under test
+// back at itself.
+func summaryColumnsOf(t *testing.T, l *listModel, width int) []summaryColumn {
+	t.Helper()
+	l.cursor = -1 // nothing styled, so the columns can be counted in plain text
+	c := summaryColumns(l.rows, width)
+	var out []summaryColumn
+	for i, r := range l.rows {
+		if r.kind == rowBlank {
+			continue
+		}
+		line := l.renderRow(i, width, c)
+		if strings.Contains(line, "\x1b") {
+			t.Fatalf("row %d is styled (CLICOLOR_FORCE?); its columns cannot be counted: %q", i, line)
+		}
+		runes := []rune(line)
+		value, tail := summaryValue(r), summaryTail(r.kind)
+		end := len(runes) - len([]rune(tail))
+		start := end - len([]rune(value))
+		if start < 0 || string(runes[start:end]) != value {
+			t.Fatalf("row %d does not end in its number %q: %q", i, value+tail, line)
+		}
+		name := start
+		for name > 0 && runes[name-1] == ' ' {
+			name--
+		}
+		out = append(out, summaryColumn{kind: r.kind, numEnd: end, gap: start - name})
+	}
+	if len(out) == 0 {
+		t.Fatal("the fixture rendered no rows at all")
+	}
+	return out
+}
+
+// summaryFixture is a week with two worked days and five empty ones, which is
+// what the alignment tests need: three kinds of row, more than one day block,
+// and a day whose total is the dash.
+func summaryFixture(t *testing.T) *listModel {
+	t.Helper()
+	mon := time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local)
+	frames := []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "alpha", mon, 3*time.Hour, "code"),
+		mkFrame("b2222222222222222222222222222222", "beta", mon.Add(4*time.Hour), 45*time.Minute, "call"),
+		mkFrame("c3333333333333333333333333333333", "alpha", mon.AddDate(0, 0, 2), 90*time.Minute, "docs"),
+	}
+	l := newListModel(mon, time.Monday)
+	l.per = period{unit: unitWeek, ref: mon}
+	l.refresh(frames, time.Monday, nil, mon)
+	return &l
+}
+
+// TestSummaryNumbersFollowTheirNames: the duration column is sized to the
+// longest name of the view, not to the terminal.
+//
+// The numbers used to be right-aligned against the body, which on a hundred
+// columns put "4h 00m" sixty columns away from the "kunde-a" it belonged to.
+// `watson aggregate` writes the number after the name, and so does this. The
+// longest name of the view is the one that ends closest to the column — it is
+// what the column was sized from — so the smallest gap is what is asserted here,
+// and under the old right-alignment it was around sixty.
+func TestSummaryNumbersFollowTheirNames(t *testing.T) {
+	const width = 100
+	cols := summaryColumnsOf(t, summaryFixture(t), width)
+	closest := width
+	for _, c := range cols {
+		closest = min(closest, c.gap)
+	}
+	if closest >= 6 {
+		t.Errorf("the longest name of the view ends %d columns before its number at width %d — "+
+			"the column is sized to the terminal, not to the names", closest, width)
+	}
+}
+
+// TestSummaryCursorDoesNotMoveTheNumbers: the marker replaces the first column
+// of the project row's indent instead of being prepended, so the numbers stand
+// still while the cursor walks the view. Prepended, every cursor row would be one
+// column longer than its neighbours and the column would wobble as j is held
+// down — the one thing an aligned column cannot survive.
+//
+// Asserted rather than left to the golden file, because summaryRow builds that
+// row's lead two different ways and only this says the two are the same width.
+func TestSummaryCursorDoesNotMoveTheNumbers(t *testing.T) {
+	l := summaryFixture(t)
+	const width = 100
+	c := summaryColumns(l.rows, width)
+	var checked int
+	for i, r := range l.rows {
+		if r.kind != rowProject {
+			continue
+		}
+		l.cursor = -1
+		plain := l.renderRow(i, width, c)
+		l.cursor = i
+		marked := l.renderRow(i, width, c)
+		if strings.Contains(marked, "\x1b") {
+			t.Fatalf("row %d is styled (CLICOLOR_FORCE?); its columns cannot be counted: %q", i, marked)
+		}
+		if !strings.Contains(marked, selectionMarker) {
+			t.Fatalf("the cursor row %q carries no %q marker", marked, selectionMarker)
+		}
+		// Put the column the marker took back and the two rows have to be the same
+		// line — which says it replaced a column of the indent and nothing else.
+		if restored := strings.Replace(marked, selectionMarker, " ", 1); restored != plain {
+			t.Errorf("row %d shifts under the cursor:\n  plain  %q\n  cursor %q", i, plain, marked)
+		}
+		checked++
+	}
+	if checked == 0 {
+		t.Fatal("the fixture rendered no project row for the cursor to sit on")
+	}
+}
+
+// TestSummaryNumbersShareOneColumn: all of them, across the day blocks and
+// across the three kinds of row. A column sized per day or per kind would be
+// ragged, which is harder to read down than a column that stands too far right.
+func TestSummaryNumbersShareOneColumn(t *testing.T) {
+	for _, width := range []int{40, 60, 100} {
+		cols := summaryColumnsOf(t, summaryFixture(t), width)
+		seen := map[rowKind]bool{}
+		want := cols[0].numEnd
+		for _, c := range cols {
+			seen[c.kind] = true
+			if c.numEnd != want {
+				t.Errorf("width %d: a row of kind %d ends its number in column %d, "+
+					"the first row in column %d", width, c.kind, c.numEnd, want)
+			}
+		}
+		// Teeth: all three kinds have to have been rendered, or a renderRow that
+		// dropped one would agree with itself about the one column it has left.
+		for _, k := range []rowKind{rowDayHeader, rowProject, rowTag} {
+			if !seen[k] {
+				t.Errorf("width %d: the fixture rendered no row of kind %d", width, k)
+			}
 		}
 	}
 }

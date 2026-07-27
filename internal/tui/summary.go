@@ -22,25 +22,103 @@ const (
 	summaryTagIndent     = 6
 )
 
-// summaryLine lays out "<indent><label>   <value>": the value right-aligned at
-// the width and always whole, the label truncated with an ellipsis when the two
-// do not both fit. The same rule the frame list, the report and the overview
-// follow — a name that ends in "…" reads as cut, a number that lost its last
-// digits does not, it reads as a smaller number.
+// summaryIndent is how far a row of this kind is indented. The day header sits
+// at the left edge, its projects and their tags at the two levels above.
+func summaryIndent(k rowKind) int {
+	switch k {
+	case rowProject:
+		return summaryProjectIndent
+	case rowTag:
+		return summaryTagIndent
+	}
+	return 0
+}
+
+// summaryLabel is what a row writes into the label column, indent excluded: a
+// day or project name followed by the em dash that sets its number off, a tag
+// name preceded by the bracket that opens it.
+func summaryLabel(r row) string {
+	if r.kind == rowTag {
+		return "[" + r.title
+	}
+	return r.title + " —"
+}
+
+// summaryValue is the number a row shows. An empty day reads as a dash: "0m"
+// invites the question whether nothing was booked or nothing is known — the same
+// answer the overview's cells and the header's comparison row give.
+func summaryValue(r row) string {
+	if r.kind == rowDayHeader && r.total == 0 {
+		return "–"
+	}
+	return formatDuration(r.total)
+}
+
+// summaryTail is what follows a row's number: the bracket that closes a tag,
+// nothing on the other kinds. It is deliberately outside the number column, so
+// that every kind of row puts its digits in the same one.
+func summaryTail(k rowKind) string {
+	if k == rowTag {
+		return "]"
+	}
+	return ""
+}
+
+// summaryColumns sizes the summary's two columns from the rows themselves: the
+// number column to the widest duration the view actually renders, the label
+// column to the longest name it actually renders, indent included.
 //
-// Every kind of summary row goes through it, which is what puts the day total,
-// the project totals and the tag totals in one right-hand column.
-func summaryLine(label, value string, indent, width int) string {
-	avail := width - indent - lipgloss.Width(value) - 1
-	if avail < 1 {
-		avail = 1
+// Sized from the data rather than from the width, because right-aligning the
+// numbers against the body put them sixty columns from the names they belong to
+// on a wide terminal. `watson aggregate` writes the number after the name, and
+// so does this — but in one column across all three kinds of row, day headers
+// included, because a number that stands in a different place on every line is
+// harder to read down than one that stands far from its name. The day header is
+// normally the longest label of the three, so it is normally what the column is
+// sized to.
+//
+// Computed over every row of the view, not only the visible ones, so scrolling
+// does not move the columns under the reader — the same reason listDurWidth
+// gives.
+//
+// Only the label gives way to the width. Under about ten columns of body not
+// even the number and a tag's closing bracket fit; the bracket is then clipped
+// by the panel, the way report.go's last column is, and no ladder is spent on a
+// terminal that narrow.
+func summaryColumns(rows []row, width int) colWidths {
+	var c colWidths
+	tail := 0
+	for _, r := range rows {
+		if r.kind == rowBlank {
+			continue
+		}
+		c.durW = max(c.durW, lipgloss.Width(summaryValue(r)))
+		c.labelW = max(c.labelW, summaryIndent(r.kind)+lipgloss.Width(summaryLabel(r)))
+		tail = max(tail, lipgloss.Width(summaryTail(r.kind)))
 	}
-	label = truncate(label, avail)
-	pad := width - indent - lipgloss.Width(label) - lipgloss.Width(value)
-	if pad < 1 {
-		pad = 1
+	c.labelW = fitLabelWidth(c.labelW, width, c.durW+tail)
+	return c
+}
+
+// summaryRow lays one row out: the indent, then the label and number columns
+// reportRow builds, then whatever closes the line. The label is truncated with
+// an ellipsis when it must give way and the number never is — the rule the frame
+// list, the report and the overview all follow.
+//
+// The indent is what gives way first, before the name: below it the label column
+// would otherwise be pushed past its width by rows that are only indented, and
+// the numbers of the deepest rows would drift out of the column the others use.
+func summaryRow(r row, c colWidths, cursor bool) string {
+	indent := min(summaryIndent(r.kind), c.labelW)
+	cell, number := reportRow(summaryLabel(r), summaryValue(r), c.labelW-indent, c.durW)
+	lead := strings.Repeat(" ", indent)
+	if cursor && indent > 0 {
+		// The marker replaces the first column of the indent instead of being
+		// prepended, so the line keeps its width and the numbers stay in their
+		// column on the cursor row too.
+		lead = selectionMarker + strings.Repeat(" ", indent-1)
 	}
-	return strings.Repeat(" ", indent) + label + strings.Repeat(" ", pad) + value
+	return lead + cell + " " + number + summaryTail(r.kind)
 }
 
 // buildSummaryRows renders the period as day blocks. The numbers come from

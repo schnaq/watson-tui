@@ -96,19 +96,29 @@ func reportDurWidth(lines []reportLine, grand time.Duration) int {
 	return w
 }
 
-// reportLayout picks the label column width for a body of the given width, with
-// the number column already sized by reportDurWidth. The number does not take
-// part in the negotiation: it is what an invoice is written from, so the label
-// gives way and shows an ellipsis, which reads as cut — a number that lost its
-// last digits does not. Unlike the overview there is no second stage and no
-// floor, because the report has no value column it could drop instead: the label
-// shrinks all the way down, and at one column it is a bare ellipsis.
-func reportLayout(width, durW int) int {
-	labelW := reportLabelMax
-	for labelW > 0 && labelW+1+durW > width {
-		labelW--
+// fitLabelWidth shrinks a wished-for label column until "label + space + tail"
+// fits width, where tail is everything that follows the separator — the number,
+// and whatever closes the line behind it. The number does not take part in the
+// negotiation: it is what an invoice is written from, so the label gives way and
+// shows an ellipsis, which reads as cut — a number that lost its last digits does
+// not. There is no floor: the label shrinks all the way down, and at one column
+// it is a bare ellipsis.
+//
+// Shared by the report and the summary, which size the same two columns from
+// their own data and then have the same question to answer about the width.
+func fitLabelWidth(want, width, tail int) int {
+	if want+1+tail > width {
+		want = width - 1 - tail
 	}
-	return labelW
+	return max(want, 0)
+}
+
+// reportLayout picks the label column width for a body of the given width, with
+// the number column already sized by reportDurWidth. Unlike the overview there
+// is no second stage, because the report has no value column it could drop
+// instead.
+func reportLayout(width, durW int) int {
+	return fitLabelWidth(reportLabelMax, width, durW)
 }
 
 // reportRow lays out one "label  number" line: the label padded to labelW and

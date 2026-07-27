@@ -441,15 +441,27 @@ func (l *listModel) view(height, width int) string {
 	if end > len(l.rows) {
 		end = len(l.rows)
 	}
-	// One duration width for the whole list, computed once: see listDurWidth.
-	durW := listDurWidth(l.rows)
+	// One set of column widths for the whole view, computed once: see
+	// listDurWidth and summaryColumns.
+	c := colWidths{durW: listDurWidth(l.rows)}
+	if l.compact {
+		c = summaryColumns(l.rows, width)
+	}
 	for i := l.offset; i < end; i++ {
-		b.WriteString(l.renderRow(i, width, durW))
+		b.WriteString(l.renderRow(i, width, c))
 		if i < end-1 {
 			b.WriteByte('\n')
 		}
 	}
 	return b.String()
+}
+
+// colWidths are the column widths one whole view shares, so that its rows line
+// up and scrolling does not move them. The frame list negotiates the rest of its
+// columns per row from durW alone (listLayout); the summary has a second column
+// to size, and sizes both from its rows (summaryColumns).
+type colWidths struct {
+	durW, labelW int
 }
 
 // listDurWidth is the width the duration column needs: the widest duration the
@@ -499,8 +511,8 @@ func dayHeaderLine(day string, total time.Duration, width int) string {
 	return truncate(day+dayHeaderSep+sum, width)
 }
 
-// renderRow renders row i into a body of `width` columns, with the duration
-// column sized to durW for the whole list. The layout is negotiated per row
+// renderRow renders row i into a body of `width` columns, with the column widths
+// c the whole view shares. The frame row's remaining layout is negotiated here
 // rather than handed down, because it is arithmetic on two numbers that are the
 // same for every row — which is also what keeps the columns of the rows aligned.
 //
@@ -509,46 +521,34 @@ func dayHeaderLine(day string, total time.Duration, width int) string {
 // summary's project and tag rows would have come out as "00:00–00:00" with an
 // empty name, because watson.Frame{}.Duration() is guarded and the zero frame
 // renders rather than panics — the worst way for a missing case to fail.
-func (l *listModel) renderRow(i, width, durW int) string {
+func (l *listModel) renderRow(i, width int, c colWidths) string {
 	r := l.rows[i]
 	switch r.kind {
 	case rowBlank:
 		return ""
 	case rowDayHeader:
 		if l.compact {
-			// The summary puts every number in one right-hand column, so its day
-			// header is laid out like the rows below it rather than with the frame
-			// list's " — " join. An empty day reads as a dash: "0m" invites the
-			// question whether nothing was booked or nothing is known — the same
-			// answer the overview's cells and the header's comparison row give.
-			total := "–"
-			if r.total > 0 {
-				total = formatDuration(r.total)
-			}
-			return styleDayHeader.Render(summaryLine(r.title+" —", total, 0, width))
+			// The summary puts every number in one column, so its day header is laid
+			// out like the rows below it rather than with the frame list's " — " join.
+			return styleDayHeader.Render(summaryRow(r, c, false))
 		}
 		return styleDayHeader.Render(dayHeaderLine(r.title, r.total, width))
 	case rowProject:
-		line := summaryLine(r.title+" —", formatDuration(r.total), summaryProjectIndent, width)
+		line := summaryRow(r, c, i == l.cursor)
 		if i == l.cursor {
-			// The marker replaces the first column of the indent instead of being
-			// prepended, so the line keeps its width and the numbers stay in their
-			// column on the cursor row too.
-			return styleSelected.Render(selectionMarker + line[1:])
+			return styleSelected.Render(line)
 		}
 		return line
 	case rowTag:
-		// The bracket encloses the tag and its number both: "[docs      42m]". The
-		// number is right-aligned inside it, which puts it one column left of the
-		// project and day totals — deliberate, so that a tag line reads as a
-		// breakdown of the row above it rather than as another row of the same
-		// kind. report.go brackets only the tag and lines its numbers up with the
-		// projects', because there they are one column, not two.
-		return styleDim.Render(summaryLine("["+r.title, formatDuration(r.total)+"]",
-			summaryTagIndent, width))
+		// The bracket encloses the tag and its number both: "[docs  42m]", and it
+		// closes directly behind the number rather than at a right edge of its own.
+		// The number itself stands in the same column as the project and day totals
+		// — the bracket is the one column the tag row has that they do not, so that
+		// a tag line reads as a breakdown of the row above it.
+		return styleDim.Render(summaryRow(r, c, false))
 	}
 	fr := r.frame
-	rl := listLayout(width, durW)
+	rl := listLayout(width, c.durW)
 
 	var b strings.Builder
 	if i == l.cursor {

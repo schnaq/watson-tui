@@ -80,9 +80,12 @@ than `6h 30m`.
 
 The summary follows the same rule with less to negotiate: it has one elastic
 column, and on a narrow terminal the day, project or tag name is shortened with
-`…` while its duration stays whole and right-aligned. Days without a recorded
-frame are shown, with `–` instead of `0m`, so a gap in the week is visible
-rather than merely absent.
+`…` while its duration stays whole. The durations stand in one column across
+day, project and tag rows, and that column is sized to the longest name the
+view actually shows rather than pinned to the right edge of the terminal — so
+the number follows the name it belongs to instead of standing sixty columns
+away from it on a wide screen. Days without a recorded frame are shown, with
+`–` instead of `0m`, so a gap in the week is visible rather than merely absent.
 
 Data directory: `$WATSON_DIR`, otherwise the OS default (macOS:
 `~/Library/Application Support/watson`). Override with `--dir PATH`.
