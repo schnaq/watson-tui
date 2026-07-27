@@ -707,22 +707,28 @@ func (a *App) footerView() string {
 }
 
 func helpView() string {
-	// Twelve lines, one per key group: the help screen does not scroll, and at 20
-	// terminal lines the panel around it fits exactly twelve — chromeHeight(20)
-	// takes six and the panel border two. There is no slack left, so one more
-	// line loses the tail to fitBody, and the tail is where the key that quits
-	// sits. That is also why s/S and r/o share a line instead of taking two each.
-	// TestHelpViewFitsTwentyLines derives the budget rather than repeating it.
+	// Ten lines, one per key group: the help screen does not scroll, so fitBody
+	// cuts whatever does not fit — from the bottom of the list, where the key that
+	// quits sits. Ten is what the shortest terminal that still draws a header can
+	// show: at height 14 the chrome takes two lines and the panel border two more,
+	// which leaves exactly ten. The budget is not monotonic — height 20 is the
+	// other tight spot, with twelve, because there the chrome costs six. That is
+	// why n/d, s/S, r/o and R/? each share a line instead of taking two.
+	// TestHelpFitsEveryTerminalWithAHeader derives the budget rather than
+	// repeating it.
+	//
+	// The period keys come second and third, ahead of the actions: they are what
+	// this screen was revisited for, and a terminal too short even for ten lines
+	// loses the tail, not the head. They also name the ‹ › the header draws around
+	// the period, so the affordance and its keys are explained in one place.
 	return `  j/k, ↓/↑     navigieren
+  [ / ]        Zeitraum zurück/vor (‹ › im Kopf)
+  t/w/m/a      Tag/Woche/Monat/alles
   enter        Frame editieren
-  n            neuer Frame
-  d            Frame löschen
+  n / d        neuer Frame · Frame löschen
   s / S        Timer starten/stoppen · verwerfen
   /            filtern
-  [ / ]        Zeitraum zurück/vor
-  t/w/m/a      Tag/Woche/Monat/alles
   r / o        Report · Übersicht (Abrechnung)
-  R            neu laden
-  ?            diese Hilfe
+  R / ?        neu laden · diese Hilfe
   q            beenden`
 }

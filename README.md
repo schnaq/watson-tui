@@ -39,6 +39,17 @@ laden (`linux_amd64` oder `linux_arm64`) und `watson-tui` in den `PATH` legen.
 | `?` | Hilfe |
 | `q` | beenden |
 
+Der Kopf zeigt, welchen Zeitraum du betrachtest — die Winkel `‹ ›` bedeuten,
+dass `[` und `]` ihn verschieben —, dazu die Summe dieses Zeitraums, den
+Vergleich zum Vorzeitraum und zur nächstgrößeren Einheit (bei einer Woche also
+Vorwoche und Monat), die Zahl der Frames und Projekte sowie einen laufenden
+Timer.
+`alle Frames` lässt sich nicht verschieben und bekommt deshalb keine Winkel und
+keinen Vergleich. Die Summe im Kopf der Liste entspricht der Liste darunter und
+zählt einen laufenden Timer deshalb nicht mit; steht `+ läuft` dahinter, ist
+genau das der Grund, warum Report und Übersicht für denselben Zeitraum mehr
+anzeigen — deren Köpfe zählen ihn mit, weil ihre Tabellen es auch tun.
+
 Die Oberfläche nutzt die ANSI-Farben deines Terminal-Themes: Kontext-Header
 oben, gerahmtes Hauptpanel, Tastenhinweise unten. Das Chrome gibt seinen Platz
 in vier Stufen an die Liste zurück: ab 24 Terminalzeilen ist der Header gerahmt
@@ -47,8 +58,9 @@ bleibt er gerahmt mit drei Feldzeilen und einer Hinweiszeile, zwischen 14 und 19
 klappt er auf eine Zeile ein, unter 14 verschwindet er ganz. Passen nicht alle
 Tastenhinweise in die Breite, fallen die hinteren ganz weg statt mitten im Wort
 zu enden; bleibt nur eine Hinweiszeile, rücken die Zeitraum-Tasten und die
-beiden Ausgänge `?` und `q` in sie zusammen. `?` zeigt immer die vollständige
-Belegung.
+beiden Ausgänge `?` und `q` in sie zusammen. `?` zeigt die vollständige
+Belegung; sie passt in jedes Terminal, das noch einen Kopf hat (ab 14 Zeilen),
+darunter fehlt ihr Ende.
 
 Auch die Frameliste richtet sich nach der Breite, und zwar in dieser Reihenfolge:
 ab etwa 88 Spalten schrumpfen die Tags (mit `…`), unter etwa 60 sind sie weg und
@@ -86,7 +98,9 @@ Rechnungen schreibst:
   Sitzung vom 31.07. 23:00 bis 01.08. 02:00 zählt also mit drei Stunden in den
   Juli, nicht gesplittet. Watson selbst rechnet genauso.
 - Ein laufender Timer zählt bis jetzt mit und wird unter der Tabelle
-  ausgewiesen — in der Übersicht und im Report gleich.
+  ausgewiesen — in der Übersicht und im Report gleich, und in deren Kopfsummen
+  ebenso. Nur die Frameliste lässt ihn aus ihrer Kopfsumme heraus, damit diese
+  mit den Tagessummen darunter zusammengeht, und schreibt `+ läuft` dahinter.
 - Grundlage ist immer die lokale Zeitzone; der Wochenstart kommt aus Watsons
   `config` (`[options] week_start`, Standard Montag).
 

@@ -313,27 +313,36 @@ func TestViewKeepsTimerBottomRight(t *testing.T) {
 // TestQuitKeyIsReachableOnAShortTerminal: at 100x20 the quit key used to be
 // discoverable nowhere — the footer cut off "q ende" and the help body was
 // clipped before "q beenden". Neither view scrolls, so both have to fit.
+//
+// The heights are the tight ones, and they are tight for different reasons: 20
+// is where the chrome costs six lines and leaves the help twelve, 14 is the
+// shortest terminal that still draws a header and leaves it ten — the smallest
+// budget there is. 15 and 16 sit between them. This renders the assembled frame;
+// TestHelpFitsEveryTerminalWithAHeader is the arithmetic behind it.
 func TestQuitKeyIsReachableOnAShortTerminal(t *testing.T) {
 	now := time.Now()
 	frames := []watson.Frame{
 		mkFrame("a1111111111111111111111111111111", "alpha", now.Add(-2*time.Hour), time.Hour),
 	}
 	for _, width := range []int{80, 100} {
-		app := chromeApp(t, now, width, 20, frames)
-		app.mode = modeList
-		if out := app.View(); !strings.Contains(out, "q ende") {
-			t.Errorf("%dx20 list: footer must name the quit key:\n%s", width, out)
-		}
-		app.mode = modeHelp
-		out := app.View()
-		var found bool
-		for _, line := range strings.Split(out, "\n") {
-			if strings.Contains(line, "beenden") && strings.Contains(line, "q") {
-				found = true
+		for _, height := range []int{14, 15, 16, 20} {
+			app := chromeApp(t, now, width, height, frames)
+			app.mode = modeList
+			if out := app.View(); !strings.Contains(out, "q ende") {
+				t.Errorf("%dx%d list: footer must name the quit key:\n%s", width, height, out)
 			}
-		}
-		if !found {
-			t.Errorf("%dx20 help: the quit key must survive the panel:\n%s", width, out)
+			app.mode = modeHelp
+			out := app.View()
+			var found bool
+			for _, line := range strings.Split(out, "\n") {
+				if strings.Contains(line, "beenden") && strings.Contains(line, "q") {
+					found = true
+				}
+			}
+			if !found {
+				t.Errorf("%dx%d help: the quit key must survive the panel:\n%s",
+					width, height, out)
+			}
 		}
 	}
 }

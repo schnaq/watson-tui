@@ -740,16 +740,59 @@ func TestFooterHintsAreGerman(t *testing.T) {
 	}
 }
 
-// TestHelpViewFitsTwentyLines: the help screen does not scroll, so fitBody cuts
-// whatever does not fit — from the bottom of the list, where the quit key sits.
-// The budget is taken from the code, not from a literal, so a change to the
-// collapse thresholds cannot silently make the help screen too long again.
-func TestHelpViewFitsTwentyLines(t *testing.T) {
-	const height = 20
-	// The panel spends two lines on its border, the chrome the rest.
-	budget := height - chromeHeight(height) - 2
-	if lines := strings.Count(helpView(), "\n") + 1; lines > budget {
-		t.Errorf("help body has %d lines, a %d-line terminal fits %d — the tail "+
-			"of the list would be clipped:\n%s", lines, height, budget, helpView())
+// TestHelpFitsEveryTerminalWithAHeader: the help screen does not scroll, so
+// fitBody cuts whatever does not fit — from the bottom of the list, where the
+// quit key sits. The budget is taken from the code, not from a literal, so a
+// change to the collapse thresholds cannot silently make the help too long again.
+//
+// A sweep rather than one height, because the budget does not grow with the
+// terminal: at 19 lines the chrome costs two and the help gets fifteen, at 20 it
+// costs six and the help gets twelve. The floor of the sweep is the shortest
+// terminal that still draws a header, and it is the tightest of them all —
+// exactly ten lines. Below it the help is clipped whatever it says, and the
+// footer is the only thing left that names a key.
+//
+// This is the arithmetic explained; that the quit key really survives the
+// assembled frame is TestQuitKeyIsReachableOnAShortTerminal, which renders it.
+func TestHelpFitsEveryTerminalWithAHeader(t *testing.T) {
+	for height := headerLineMinHeight; height <= 40; height++ {
+		// What View leaves the help: the terminal minus the chrome, minus the two
+		// border lines of the panel drawn around the body.
+		budget := height - chromeHeight(height) - 2
+		if lines := strings.Count(helpView(), "\n") + 1; lines > budget {
+			t.Errorf("help body has %d lines, a %d-line terminal fits %d — the tail "+
+				"of the list would be clipped:\n%s", lines, height, budget, helpView())
+		}
+	}
+}
+
+// TestHelpTeachesThePeriodKeysFirst: [ and ] are why this feature exists — they
+// shifted the period and nothing on the screen said so. The help lists them
+// right behind the navigation keys, ahead of the actions, for two reasons: a
+// terminal too short even for ten lines loses the tail rather than them, and the
+// eye that goes looking for "how do I get to last week" finds them at the top.
+//
+// The ‹ › is asserted too: periodField draws those angles around the period to
+// stand for these keys, and the help is the one place that says so in words.
+func TestHelpTeachesThePeriodKeysFirst(t *testing.T) {
+	lines := strings.Split(helpView(), "\n")
+	for _, want := range []string{"[ / ]", "t/w/m/a"} {
+		at := -1
+		for i, line := range lines {
+			if strings.Contains(line, want) {
+				at = i
+			}
+		}
+		switch {
+		case at < 0:
+			t.Errorf("the help does not name %q:\n%s", want, helpView())
+		case at > 2:
+			t.Errorf("%q sits on line %d; the period keys belong in the first three, "+
+				"where a clipped help still shows them:\n%s", want, at+1, helpView())
+		}
+	}
+	if !strings.Contains(helpView(), "‹ ›") {
+		t.Errorf("the help must explain the ‹ › periodField draws around the period:\n%s",
+			helpView())
 	}
 }
