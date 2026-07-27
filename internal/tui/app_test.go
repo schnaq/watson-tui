@@ -41,6 +41,44 @@ func newTestApp(t *testing.T) *App {
 	return app
 }
 
+// TestNewAppNormalisesThePeriodAgainstTheConfiguredWeekStart: NewApp reads the
+// config itself rather than leaving it to Init, because it builds the list
+// before Init runs and the list normalises its period against the week start
+// right there. With the zero value the period is normalised against Sunday and
+// then read back with the configured week start, and it resolves to the week
+// before.
+//
+// Deliberately not asserted against app.cfg.WeekStart: under the bug both the
+// period and the config field are the zero value, so they agree with each other
+// and the assertion passes. The week start has to come from somewhere the app
+// does not reach — hence a config file the test wrote and bounds() called
+// directly with the weekday that file names.
+//
+// Wednesday, because it is neither the configured default (Monday) nor the zero
+// value (Sunday), so neither can be mistaken for a pass. A Wednesday-started
+// week and a Sunday-started week never begin on the same date — one day has one
+// weekday — so there is no calendar position at which the bug would look right.
+func TestNewAppNormalisesThePeriodAgainstTheConfiguredWeekStart(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "config"),
+		[]byte("[options]\nweek_start = wednesday\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// No Init: the point is that the list is already right when NewApp returns.
+	app := NewApp(watson.NewStore(dir), "test")
+
+	want, _, _ := period{unit: unitWeek, ref: time.Now()}.bounds(time.Wednesday)
+	if got := app.list.per.ref; !got.Equal(want) {
+		t.Errorf("NewApp built the list against the wrong week start:\n got %s\nwant %s",
+			got.Format(time.RFC3339), want.Format(time.RFC3339))
+	}
+	// The same claim, immune to the two time.Now() calls above straddling
+	// midnight — and Sunday under the bug, so it is damning on its own.
+	if wd := app.list.per.ref.Weekday(); wd != time.Wednesday {
+		t.Errorf("the list's period starts on a %s, want Wednesday", wd)
+	}
+}
+
 func TestQKeyQuits(t *testing.T) {
 	app := newTestApp(t)
 	_, cmd := app.Update(key("q"))
