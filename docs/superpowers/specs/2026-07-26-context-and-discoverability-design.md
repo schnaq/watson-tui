@@ -39,7 +39,7 @@ Kein Verhalten, keine neue Taste, keine Änderung an Datenlayer oder Berechnung.
 │ …                                                                │
 ╰──────────────────────────────────────────────────────────────────╯
  j/k bewegen   [ ] Zeitraum   t/w/m/a Tag/Woche/Monat/alles
- enter bearbeiten  n neu  d löschen  s timer  / filtern  r report  ? hilfe  q ende
+ enter bearbeiten  ? hilfe  q ende  n neu  d löschen  s timer  / filtern  r report
 ```
 
 ### Zeitraum-Feld
@@ -80,9 +80,9 @@ Die Übersicht hat feste Spalten, also kein `‹ ›` und keine Vergleichszeile.
 Zwei Gruppen, jede eine Zeile. Innerhalb einer Gruppe wird wie bisher von hinten weggelassen, wenn die Breite nicht reicht — nie mitten im Wort. Die Taste steht in der Akzentfarbe, die Beschreibung gedämpft.
 
 - **Zeile 1 (Navigation und Zeitraum):** `j/k bewegen`, `[ ] Zeitraum`, `t/w/m/a Tag/Woche/Monat/alles`
-- **Zeile 2 (Aktionen und Ansichten):** `enter bearbeiten`, `n neu`, `d löschen`, `s timer`, `/ filtern`, `r report`, `o übersicht`, `R neu laden`, `? hilfe`, `q ende`
+- **Zeile 2 (Aktionen und Ansichten):** `enter bearbeiten`, `? hilfe`, `q ende`, `n neu`, `d löschen`, `s timer`, `/ filtern`, `r report`, `o übersicht`, `R neu laden`
 
-`? hilfe` und `q ende` stehen in Zeile 2 so weit vorn, dass sie bis 80 Spalten überleben — es sind die zwei Tasten, die man ohne sie nicht mehr nachschlagen kann. Die anderen Modi behalten je eine Zeile mit ihren bisherigen Hinweisen.
+`? hilfe` und `q ende` stehen in Zeile 2 an zweiter und dritter Stelle, damit sie bis 80 Spalten überleben — es sind die zwei Tasten, die man ohne sie nicht mehr nachschlagen kann. Sie standen ursprünglich weiter hinten; das deutsche `enter bearbeiten` ist sechs Spalten breiter als das englische `enter edit`, und in der zusammengelegten einzeiligen Fußzeile bei 60 Spalten ging diese Breite genau von `? hilfe` ab. Die anderen Modi behalten je eine Zeile mit ihren bisherigen Hinweisen.
 
 Steht nur eine Fußzeile zur Verfügung (Terminalhöhe unter 24), werden die Gruppen **nicht** zusammengeführt, sondern in eine Zeile gegossen und von hinten gekürzt: erst `j/k bewegen`, `[ ] Zeitraum`, dann `? hilfe`, `q ende`, dann der Rest in der Reihenfolge von Zeile 2. So bleiben Zeitraum-Navigation und die beiden Notausgänge auch auf niedrigen Terminals sichtbar — das ist der Zweck der ganzen Änderung.
 

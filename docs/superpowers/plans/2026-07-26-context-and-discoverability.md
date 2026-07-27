@@ -553,7 +553,7 @@ func footerHints(m mode) [][]string {
 	default:
 		return [][]string{
 			{"j/k bewegen", "[ ] Zeitraum", "t/w/m/a Tag/Woche/Monat/alles"},
-			{"enter bearbeiten", "n neu", "? hilfe", "q ende", "d löschen", "s timer",
+			{"enter bearbeiten", "? hilfe", "q ende", "n neu", "d löschen", "s timer",
 				"/ filtern", "r report", "o übersicht", "R neu laden"},
 		}
 	}
