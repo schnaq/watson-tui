@@ -125,8 +125,10 @@ type reportModel struct {
 	per period
 }
 
-func newReportModel(now time.Time) reportModel {
-	return reportModel{per: period{unit: unitWeek, ref: now}}
+// newReportModel opens the report on the week around now, normalised to that
+// week's start; see the invariant on period.
+func newReportModel(now time.Time, weekStart time.Weekday) reportModel {
+	return reportModel{per: period{unit: unitWeek, ref: now}.shift(weekStart, 0)}
 }
 
 // runningInPeriod reports whether the frame withRunning appends is counted for

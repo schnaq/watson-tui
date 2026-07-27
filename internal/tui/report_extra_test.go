@@ -161,7 +161,7 @@ func TestReportViewRenders(t *testing.T) {
 
 // TestReportViewEmpty: empty period shows the hint line.
 func TestReportViewEmpty(t *testing.T) {
-	out := newReportModel(time.Now()).view(nil, nil, time.Monday, time.Now(), 80)
+	out := newReportModel(time.Now(), time.Monday).view(nil, nil, time.Monday, time.Now(), 80)
 	if !strings.Contains(out, "keine Frames im Zeitraum") {
 		t.Errorf("empty report must show hint, got:\n%s", out)
 	}

@@ -51,10 +51,16 @@ type App struct {
 	width, height int
 }
 
+// NewApp reads the config here rather than leaving it to Init, because the
+// list it builds needs the week start: a period normalised against the zero
+// value (Sunday) and then read back with the configured Monday resolves to the
+// week before. Init reads it again — the file may have changed in between, and
+// it costs one read.
 func NewApp(store *watson.Store, version string) *App {
+	cfg := store.Config()
 	return &App{
-		store: store, version: version, mode: modeList, now: time.Now(),
-		width: 80, height: 24, list: newListModel(time.Now()),
+		store: store, version: version, cfg: cfg, mode: modeList, now: time.Now(),
+		width: 80, height: 24, list: newListModel(time.Now(), cfg.WeekStart),
 	}
 }
 
@@ -112,12 +118,15 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "esc", "q", "r":
 				a.mode = modeList
+			// shift(ws, 0) normalises ref to the period's start; see the
+			// invariant on period. Without it the report's ‹month of this
+			// week› would depend on the minute the key was pressed.
 			case "t":
-				a.report.per = period{unit: unitDay, ref: time.Now()}
+				a.report.per = period{unit: unitDay, ref: time.Now()}.shift(a.cfg.WeekStart, 0)
 			case "w":
-				a.report.per = period{unit: unitWeek, ref: time.Now()}
+				a.report.per = period{unit: unitWeek, ref: time.Now()}.shift(a.cfg.WeekStart, 0)
 			case "m":
-				a.report.per = period{unit: unitMonth, ref: time.Now()}
+				a.report.per = period{unit: unitMonth, ref: time.Now()}.shift(a.cfg.WeekStart, 0)
 			case "[":
 				a.report.per = a.report.per.shift(a.cfg.WeekStart, -1)
 			case "]":
@@ -244,7 +253,7 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "R":
 		a.reload()
 	case "r":
-		a.report = newReportModel(time.Now())
+		a.report = newReportModel(time.Now(), a.cfg.WeekStart)
 		a.mode = modeReport
 	case "o":
 		a.mode = modeOverview
@@ -253,7 +262,7 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (a *App) setPeriodUnit(u periodUnit) {
-	a.list.per = period{unit: u, ref: time.Now()}
+	a.list.per = period{unit: u, ref: time.Now()}.shift(a.cfg.WeekStart, 0)
 	a.list.refresh(a.frames, a.cfg.WeekStart)
 }
 

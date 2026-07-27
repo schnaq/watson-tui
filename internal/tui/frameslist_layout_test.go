@@ -41,7 +41,7 @@ func wideAndNarrowFrames(day time.Time) []watson.Frame {
 func TestListKeepsColumnsAlignedPastNinetyNineHours(t *testing.T) {
 	day := time.Date(2026, 7, 21, 9, 0, 0, 0, time.Local)
 	frames := wideAndNarrowFrames(day)
-	l := newListModel(day)
+	l := newListModel(day, time.Monday)
 	l.per = period{unit: unitAll, ref: day}
 	l.refresh(frames, time.Monday)
 	// No row is the cursor row, so nothing is styled and the assertions can count
@@ -139,7 +139,7 @@ func TestListNeverShowsAPartialFrameID(t *testing.T) {
 	now := time.Date(2026, 7, 22, 15, 4, 5, 0, time.Local)
 	day := time.Date(2026, 7, 21, 9, 0, 0, 0, time.Local)
 	frames := wideAndNarrowFrames(day)
-	l := newListModel(day)
+	l := newListModel(day, time.Monday)
 	l.per = period{unit: unitAll, ref: day}
 	l.refresh(frames, time.Monday)
 
@@ -222,7 +222,7 @@ func TestListLayoutGivesWayInPriorityOrder(t *testing.T) {
 // is rendered directly.
 func TestListLastResortCutsTheNumberVisibly(t *testing.T) {
 	day := time.Date(2026, 7, 21, 9, 0, 0, 0, time.Local)
-	l := newListModel(day)
+	l := newListModel(day, time.Monday)
 	l.per = period{unit: unitAll, ref: day}
 	l.refresh(wideAndNarrowFrames(day), time.Monday)
 	l.cursor = -1
@@ -252,7 +252,7 @@ func TestListKeepsTheDayTotalWhole(t *testing.T) {
 	now := time.Date(2026, 7, 22, 15, 4, 5, 0, time.Local)
 	day := time.Date(2026, 7, 21, 9, 0, 0, 0, time.Local)
 	frames := wideAndNarrowFrames(day)
-	l := newListModel(day)
+	l := newListModel(day, time.Monday)
 	l.per = period{unit: unitAll, ref: day}
 	l.refresh(frames, time.Monday)
 	total := formatDuration(130*time.Hour + 30*time.Minute)

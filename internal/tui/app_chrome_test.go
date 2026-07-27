@@ -37,7 +37,7 @@ func chromeApp(t *testing.T, now time.Time, width, height int, frames []watson.F
 	app.list.refresh(app.frames, time.Monday)
 	app.form = newFormModel(&app.frames[0], app.frames, now)
 	app.start = newStartModel(app.frames)
-	app.report = newReportModel(now)
+	app.report = newReportModel(now, time.Monday)
 	app.pendingDelete = app.frames[0]
 	// A running timer with tags: the widest header field there is, and it lands in
 	// the second header row, which is where the width arithmetic is tightest. Left
@@ -197,7 +197,7 @@ func TestHeaderFieldsPerMode(t *testing.T) {
 		t.Errorf("overview header = %q", got)
 	}
 	app.mode = modeReport
-	app.report = newReportModel(now)
+	app.report = newReportModel(now, time.Monday)
 	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Report") {
 		t.Errorf("report header = %q", got)
 	}

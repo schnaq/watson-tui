@@ -22,6 +22,13 @@ const (
 )
 
 // period is a display time range: a unit plus a reference time inside it.
+//
+// Invariant: ref is the period's start, from construction on — shift(ws, 0)
+// establishes it, and every constructor applies it. bounds() does not care, it
+// normalises anyway, but everyone who reads ref does: the header asks which
+// month a week belongs to, and with ref left at the instant of construction a
+// week across a month boundary answered whichever month that instant fell in,
+// while the same week reached with ] and [ answered the other one.
 type period struct {
 	unit periodUnit
 	ref  time.Time
@@ -212,11 +219,18 @@ type listModel struct {
 	filterInput textinput.Model
 }
 
-func newListModel(now time.Time) listModel {
+// newListModel starts on the week around now. weekStart is not decoration: the
+// period is normalised to its start right here, so ref means the same thing
+// before the first shift as after it — see period.shift.
+func newListModel(now time.Time, weekStart time.Weekday) listModel {
 	ti := textinput.New()
 	ti.Prompt = "/"
 	ti.Placeholder = "Projekt, Tag oder ID"
-	return listModel{per: period{unit: unitWeek, ref: now}, cursor: -1, filterInput: ti}
+	return listModel{
+		per:         period{unit: unitWeek, ref: now}.shift(weekStart, 0),
+		cursor:      -1,
+		filterInput: ti,
+	}
 }
 
 // refresh rebuilds rows and keeps the selection on the same frame if possible.
