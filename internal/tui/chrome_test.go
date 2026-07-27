@@ -159,9 +159,9 @@ func TestMergedHintsKeepThePeriodAndTheExits(t *testing.T) {
 		width int
 		wants []string
 	}{
-		{60, []string{"[ ]", "? hilfe"}}, // 58 columns: q ende no longer fits
-		{80, []string{"[ ]", "? hilfe", "q ende"}},
-		{100, []string{"[ ]", "? hilfe", "q ende"}},
+		{60, []string{"← →", "? hilfe"}}, // 58 columns: q ende no longer fits
+		{80, []string{"← →", "? hilfe", "q ende"}},
+		{100, []string{"← →", "? hilfe", "q ende"}},
 	} {
 		out := renderFooter(c.width, merged, "")
 		if strings.Contains(out, "\n") {
@@ -205,13 +205,13 @@ func TestFooterHintsListPeriodKeys(t *testing.T) {
 		t.Fatalf("list hints must come in two groups, got %d", len(groups))
 	}
 	flat := strings.Join(append(append([]string{}, groups[0]...), groups[1]...), " ")
-	for _, want := range []string{"[ ]", "t/w/m/a", "? hilfe", "q ende"} {
+	for _, want := range []string{"← →", "t/w/m/a", "? hilfe", "q ende"} {
 		if !strings.Contains(flat, want) {
 			t.Errorf("list hints missing %q: %q", want, flat)
 		}
 	}
 	// Group 1 is navigation and period, group 2 actions and views.
-	if !strings.Contains(strings.Join(groups[0], " "), "[ ]") {
+	if !strings.Contains(strings.Join(groups[0], " "), "← →") {
 		t.Errorf("period keys belong in the first group: %q", groups[0])
 	}
 }
@@ -221,7 +221,7 @@ func TestFooterHintsListPeriodKeys(t *testing.T) {
 func TestFooterKeepsPeriodAndExitsAt80(t *testing.T) {
 	groups := footerHints(modeList)
 	first := renderFooter(80, groups[:1], "")
-	if !strings.Contains(first, "[ ]") {
+	if !strings.Contains(first, "← →") {
 		t.Errorf("period hint gone at 80 columns: %q", first)
 	}
 	second := renderFooter(80, groups[1:], "")
@@ -776,7 +776,9 @@ func TestHelpFitsEveryTerminalWithAHeader(t *testing.T) {
 // stand for these keys, and the help is the one place that says so in words.
 func TestHelpTeachesThePeriodKeysFirst(t *testing.T) {
 	lines := strings.Split(helpView(), "\n")
-	for _, want := range []string{"[ / ]", "t/w/m/a"} {
+	// Both spellings: the arrows are what the footer advertises and what a user
+	// reaches for, the brackets are the alternative only the help mentions.
+	for _, want := range []string{"← →", "[ ]", "t/w/m/a"} {
 		at := -1
 		for i, line := range lines {
 			if strings.Contains(line, want) {

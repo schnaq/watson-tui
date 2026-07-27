@@ -128,9 +128,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				a.report.per = period{unit: unitWeek, ref: time.Now()}.shift(a.cfg.WeekStart, 0)
 			case "m":
 				a.report.per = period{unit: unitMonth, ref: time.Now()}.shift(a.cfg.WeekStart, 0)
-			case "[":
+			// Arrows and brackets do the same step. The ‹ › around the period in
+			// the header reads as arrows, so the arrow keys are what a user
+			// reaches for; [ ] stay because they need no hand movement.
+			case "[", "left":
 				a.report.per = a.report.per.shift(a.cfg.WeekStart, -1)
-			case "]":
+			case "]", "right":
 				a.report.per = a.report.per.shift(a.cfg.WeekStart, +1)
 			}
 			return a, nil
@@ -217,10 +220,13 @@ func (a *App) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		a.list.filtering = true
 		a.list.filterInput.Focus()
 		return a, textinput.Blink
-	case "[":
+	// Arrows and brackets do the same step; see the note in the report handler.
+	// This sits outside the filtering branch above, so while a filter is being
+	// typed the arrows still move the text cursor.
+	case "[", "left":
 		a.list.per = a.list.per.shift(a.cfg.WeekStart, -1)
 		a.list.refresh(a.frames, a.cfg.WeekStart)
-	case "]":
+	case "]", "right":
 		a.list.per = a.list.per.shift(a.cfg.WeekStart, +1)
 		a.list.refresh(a.frames, a.cfg.WeekStart)
 	case "t":
@@ -722,7 +728,7 @@ func helpView() string {
 	// loses the tail, not the head. They also name the ‹ › the header draws around
 	// the period, so the affordance and its keys are explained in one place.
 	return `  j/k, ↓/↑     navigieren
-  [ / ]        Zeitraum zurück/vor (‹ › im Kopf)
+  ← →, [ ]     Zeitraum zurück/vor (‹ › im Kopf)
   t/w/m/a      Tag/Woche/Monat/alles
   enter        Frame editieren
   n / d        neuer Frame · Frame löschen

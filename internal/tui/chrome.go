@@ -152,7 +152,7 @@ func mergeHints(groups [][]string) []string {
 	if len(groups) == 0 {
 		return nil
 	}
-	const lead = 2 // "j/k bewegen" and "[ ] Zeitraum"
+	const lead = 2 // "j/k bewegen" and "← → Zeitraum"
 	head, tail := groups[0], []string(nil)
 	if len(head) > lead {
 		head, tail = head[:lead], head[lead:]
@@ -187,7 +187,7 @@ func footerHints(m mode) [][]string {
 		return [][]string{{"beliebige Taste beendet watson-tui"}}
 	default:
 		// Navigation and period on the first line, actions and views on the
-		// second. "[ ] Zeitraum" and "t/w/m/a" are why this change exists: the
+		// second. "← → Zeitraum" and "t/w/m/a" are why this change exists: the
 		// period read as a state because no hint ever said it could be moved.
 		//
 		// "? hilfe" and "q ende" sit second and third in the second group on
@@ -198,7 +198,7 @@ func footerHints(m mode) [][]string {
 		// the 60 columns the merged single line has to work at, that width came
 		// out of "? hilfe". Moving it up one slot is what buys it back.
 		return [][]string{
-			{"j/k bewegen", "[ ] Zeitraum", "t/w/m/a Tag/Woche/Monat/alles"},
+			{"j/k bewegen", "← → Zeitraum", "t/w/m/a Tag/Woche/Monat/alles"},
 			{"enter bearbeiten", "? hilfe", "q ende", "n neu", "d löschen", "s timer",
 				"/ filtern", "r report", "o übersicht", "R neu laden"},
 		}

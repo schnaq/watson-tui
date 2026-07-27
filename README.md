@@ -31,7 +31,7 @@ laden (`linux_amd64` oder `linux_arm64`) und `watson-tui` in den `PATH` legen.
 | `s` | Timer starten/stoppen |
 | `S` | Timer verwerfen |
 | `/` | filtern (Projekt, Tag, ID) |
-| `[` / `]` | Zeitraum zurück/vor |
+| `←` / `→` (oder `[` / `]`) | Zeitraum zurück/vor |
 | `t`/`w`/`m`/`a` | Tag/Woche/Monat/alles |
 | `r` | Report |
 | `o` | Übersicht (Abrechnung) |
@@ -40,10 +40,10 @@ laden (`linux_amd64` oder `linux_arm64`) und `watson-tui` in den `PATH` legen.
 | `q` | beenden |
 
 Der Kopf zeigt, welchen Zeitraum du betrachtest — die Winkel `‹ ›` bedeuten,
-dass `[` und `]` ihn verschieben —, dazu die Summe dieses Zeitraums, den
-Vergleich zum Vorzeitraum und zur nächstgrößeren Einheit (bei einer Woche also
-Vorwoche und Monat), die Zahl der Frames und Projekte sowie einen laufenden
-Timer.
+dass `←` und `→` ihn verschieben (`[` und `]` tun dasselbe) —, dazu die Summe
+dieses Zeitraums, den Vergleich zum Vorzeitraum und zur nächstgrößeren Einheit
+(bei einer Woche also Vorwoche und Monat), die Zahl der Frames und Projekte
+sowie einen laufenden Timer.
 `alle Frames` lässt sich nicht verschieben und bekommt deshalb keine Winkel und
 keinen Vergleich. Die Summe im Kopf der Liste entspricht der Liste darunter und
 zählt einen laufenden Timer deshalb nicht mit; steht `+ läuft` dahinter, ist

@@ -808,11 +808,87 @@ func TestViewShowsPeriodKeysInTheFooter(t *testing.T) {
 	for _, size := range []tea.WindowSizeMsg{{Width: 100, Height: 30}, {Width: 80, Height: 24}, {Width: 80, Height: 20}} {
 		app.Update(size)
 		out := app.View()
-		if !strings.Contains(out, "[ ]") {
+		if !strings.Contains(out, "← →") {
 			t.Errorf("%dx%d: the period keys must be visible:\n%s", size.Width, size.Height, out)
 		}
 		if !strings.Contains(out, "q ende") {
 			t.Errorf("%dx%d: the quit key must be visible:\n%s", size.Width, size.Height, out)
 		}
+	}
+}
+
+// TestArrowKeysShiftThePeriod: ← and → do what [ and ] do, in the list and in
+// the report. The ‹ › affordance in the header reads as arrows, so the arrow
+// keys are the form a user reaches for first.
+func TestArrowKeysShiftThePeriod(t *testing.T) {
+	app := newTestApp(t)
+	app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+
+	// List: left goes back one unit, right returns.
+	start := app.list.per
+	app.Update(key("left"))
+	back := app.list.per
+	if back == start {
+		t.Fatal("← must shift the list period back")
+	}
+	app.Update(key("right"))
+	if app.list.per != start {
+		t.Errorf("→ must undo ←: got %v, want %v", app.list.per, start)
+	}
+	// The same step as [ produces.
+	app.Update(key("["))
+	if app.list.per != back {
+		t.Errorf("← and [ must be the same step: %v vs %v", back, app.list.per)
+	}
+
+	// The unit in effect decides the step size.
+	app.Update(key("m"))
+	month := app.list.per
+	app.Update(key("left"))
+	from, _, _ := app.list.per.bounds(time.Monday)
+	prevFrom, _, _ := month.bounds(time.Monday)
+	if from.AddDate(0, 1, 0) != prevFrom {
+		t.Errorf("← on a month must step one month: %v → %v", prevFrom, from)
+	}
+
+	// Report: same keys, same effect.
+	app.Update(key("esc"))
+	app.Update(key("r"))
+	rStart := app.report.per
+	app.Update(key("left"))
+	if app.report.per == rStart {
+		t.Fatal("← must shift the report period back")
+	}
+	app.Update(key("right"))
+	if app.report.per != rStart {
+		t.Errorf("→ must undo ← in the report too")
+	}
+}
+
+// TestArrowKeysStayOutOfTheFilterInput: while filtering, ← and → move the text
+// cursor — shifting the period out from under a half-typed filter would be a
+// trap.
+func TestArrowKeysStayOutOfTheFilterInput(t *testing.T) {
+	app := newTestApp(t)
+	app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	before := app.list.per
+	app.Update(key("/"))
+	app.Update(key("a"))
+	app.Update(key("left"))
+	app.Update(key("right"))
+	if app.list.per != before {
+		t.Errorf("arrows must not shift the period while filtering: %v → %v", before, app.list.per)
+	}
+	if !app.list.filtering {
+		t.Error("arrows must not leave filter mode")
+	}
+}
+
+// TestFooterNamesTheArrowKeys: the hint has to name the keys a user will try.
+func TestFooterNamesTheArrowKeys(t *testing.T) {
+	app := newTestApp(t)
+	app.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	if out := app.View(); !strings.Contains(out, "← → Zeitraum") {
+		t.Errorf("footer must name the arrow keys:\n%s", out)
 	}
 }
