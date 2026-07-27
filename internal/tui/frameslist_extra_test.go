@@ -71,10 +71,62 @@ func TestFirstAndNextFrameRowEmpty(t *testing.T) {
 	}
 }
 
+// TestPeriodRefStartsAtThePeriodStart: ref must be the period's start from the
+// moment the period is built, not only after a shift. Until it was, the same
+// view answered two ways: the week of Monday 31.08.2026, looked at on Sunday
+// 06.09., resolved to September — because ref was the arbitrary instant of
+// construction — while after ] and [ back it resolved to August. Whoever asks
+// "which month is this week in" has to get one answer, and the header does ask.
+func TestPeriodRefStartsAtThePeriodStart(t *testing.T) {
+	sunday := time.Date(2026, 9, 6, 17, 30, 0, 0, time.Local) // last day of that week
+	want := time.Date(2026, 8, 31, 0, 0, 0, 0, time.Local)    // its Monday
+	if got := newListModel(sunday, time.Monday).per.ref; !got.Equal(want) {
+		t.Errorf("newListModel ref = %v, want the week's start %v", got, want)
+	}
+	if got := newReportModel(sunday, time.Monday).per.ref; !got.Equal(want) {
+		t.Errorf("newReportModel ref = %v, want the week's start %v", got, want)
+	}
+	// The same period, one shift out and back: the invariant is that these two
+	// ways of arriving at a week cannot disagree.
+	shifted := newListModel(sunday, time.Monday).per.shift(time.Monday, +1).shift(time.Monday, -1)
+	if got := newListModel(sunday, time.Monday).per; got.ref != shifted.ref {
+		t.Errorf("constructed ref %v, but ] then [ gives %v", got.ref, shifted.ref)
+	}
+}
+
+// TestAppPeriodKeysNormaliseRef: every key that builds a period has to leave it
+// normalised too, or the invariant holds only until the user presses w. Against
+// bounds() rather than a literal, so the assertion does not depend on the day
+// the suite runs on.
+func TestAppPeriodKeysNormaliseRef(t *testing.T) {
+	normalised := func(t *testing.T, what string, p period, weekStart time.Weekday) {
+		t.Helper()
+		from, _, ok := p.bounds(weekStart)
+		if !ok {
+			return // unitAll has no bounds to normalise to
+		}
+		if !p.ref.Equal(from) {
+			t.Errorf("%s: ref = %v, want the period's start %v", what, p.ref, from)
+		}
+	}
+	for _, k := range []string{"t", "w", "m", "a"} {
+		app := newTestApp(t)
+		app.Update(key(k))
+		normalised(t, "list key "+k, app.list.per, app.cfg.WeekStart)
+	}
+	for _, k := range []string{"t", "w", "m"} {
+		app := newTestApp(t)
+		app.Update(key("r")) // opens the report, which builds a period of its own
+		normalised(t, "report", app.report.per, app.cfg.WeekStart)
+		app.Update(key(k))
+		normalised(t, "report key "+k, app.report.per, app.cfg.WeekStart)
+	}
+}
+
 // TestListMoveEmpty ensures move() and selected() are safe on an empty list
 // (cursor == -1).
 func TestListMoveEmpty(t *testing.T) {
-	l := newListModel(time.Now())
+	l := newListModel(time.Now(), time.Monday)
 	if _, ok := l.selected(); ok {
 		t.Error("empty list must not report a selection")
 	}
@@ -86,37 +138,44 @@ func TestListMoveEmpty(t *testing.T) {
 
 // TestListViewEmptyMessages covers view()'s two empty-state messages.
 func TestListViewEmptyMessages(t *testing.T) {
-	l := newListModel(time.Now())
-	if got := l.view(10); !strings.Contains(got, "keine Frames im Zeitraum") {
+	l := newListModel(time.Now(), time.Monday)
+	if got := l.view(10, 80); !strings.Contains(got, "keine Frames im Zeitraum") {
 		t.Errorf("empty view = %q", got)
 	}
 	l.filter = "zzz"
-	if got := l.view(10); !strings.Contains(got, "kein Treffer für Filter »zzz«") {
+	if got := l.view(10, 80); !strings.Contains(got, "kein Treffer für Filter »zzz«") {
 		t.Errorf("no-match view = %q", got)
 	}
 }
 
-// TestStatusLeft covers the three branches of the new App.statusLeft():
-// plain (period + count), filtering (live input view), and a set filter.
-func TestStatusLeft(t *testing.T) {
+// TestHeaderFieldsListBranches covers the three filter branches of the list
+// header: no filter (the field says so instead of vanishing), a set filter, and
+// the live input while typing, which has to replace the stored filter rather
+// than sit next to it.
+func TestHeaderFieldsListBranches(t *testing.T) {
 	app := newTestApp(t)
+	app.mode = modeList
 	app.list.per = period{unit: unitAll, ref: time.Now()}
 	app.list.refresh(app.frames, time.Monday)
 
-	if got := app.statusLeft(); !strings.Contains(got, "· 0 Frames") || strings.Contains(got, "Filter") {
-		t.Errorf("plain statusLeft = %q", got)
+	// "0 Frames", not "Frames 0": the count shares its row with the number of
+	// projects, so it carries its own unit instead of a label.
+	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "0 Frames") ||
+		!strings.Contains(got, "Filter —") {
+		t.Errorf("plain header = %q", got)
 	}
 
 	app.list.filter = "foo"
-	if got := app.statusLeft(); !strings.Contains(got, "Filter: foo") {
-		t.Errorf("filter statusLeft = %q", got)
+	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "Filter foo") {
+		t.Errorf("filter header = %q", got)
 	}
 
 	app.list.filtering = true
 	app.list.filterInput.Focus()
 	app.list.filterInput.SetValue("bar")
-	if got := app.statusLeft(); !strings.Contains(got, "bar") || strings.Contains(got, "Filter: foo") {
-		t.Errorf("filtering statusLeft = %q", got)
+	if got := renderFieldsFlat(app.headerFields()); !strings.Contains(got, "bar") ||
+		strings.Contains(got, "Filter foo") {
+		t.Errorf("filtering header = %q", got)
 	}
 }
 
@@ -125,12 +184,12 @@ func TestStatusLeft(t *testing.T) {
 // brief tests do not.
 func TestListViewRendersRows(t *testing.T) {
 	day := time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local) // Montag
-	l := newListModel(day)
+	l := newListModel(day, time.Monday)
 	l.per = period{unit: unitWeek, ref: day}
 	l.refresh([]watson.Frame{
 		mkFrame("a1111111111111111111111111111111", "alpha", day, time.Hour, "tag1"),
 	}, time.Monday)
-	out := l.view(10)
+	out := l.view(10, 80)
 	if !strings.Contains(out, "alpha") {
 		t.Errorf("view missing project: %q", out)
 	}

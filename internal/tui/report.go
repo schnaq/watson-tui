@@ -73,12 +73,62 @@ func aggregate(frames []watson.Frame, p period, weekStart time.Weekday) ([]repor
 	return lines, grand
 }
 
+// reportLabelMax is the widest the label column gets: a project name, or a tag
+// indented and bracketed below it. The label is the only column that gives way
+// on a narrow terminal — see reportLayout.
+const reportLabelMax = 32
+
+// reportDurWidth is the width the number column needs: the widest duration this
+// report actually renders. Data-driven instead of a fixed eight columns
+// ("999h 59m") for two reasons. A five-digit total ("123456h 00m") does not fit a
+// fixed column and would have to be cut. And padding a short number out to a
+// fixed width is itself a clipping risk: right-aligned, "45m" becomes "     45m",
+// so on a body too narrow for that the digits fall off the right edge where the
+// bare "45m" would still have fitted.
+func reportDurWidth(lines []reportLine, grand time.Duration) int {
+	w := len(formatDuration(grand))
+	for _, l := range lines {
+		w = max(w, len(formatDuration(l.total)))
+		for _, tl := range l.tags {
+			w = max(w, len(formatDuration(tl.d)))
+		}
+	}
+	return w
+}
+
+// reportLayout picks the label column width for a body of the given width, with
+// the number column already sized by reportDurWidth. The number does not take
+// part in the negotiation: it is what an invoice is written from, so the label
+// gives way and shows an ellipsis, which reads as cut — a number that lost its
+// last digits does not. Unlike the overview there is no second stage and no
+// floor, because the report has no value column it could drop instead: the label
+// shrinks all the way down, and at one column it is a bare ellipsis.
+func reportLayout(width, durW int) int {
+	labelW := reportLabelMax
+	for labelW > 0 && labelW+1+durW > width {
+		labelW--
+	}
+	return labelW
+}
+
+// reportRow lays out one "label  number" line: the label padded to labelW and
+// truncated with an ellipsis when it must give way, the number right-aligned in
+// durW. The two come back separately so a caller can colour the label without the
+// number inheriting it, and because the padding has to be computed on the plain
+// text — a %-*s over a styled string counts escape bytes as columns and pads the
+// line past the width.
+func reportRow(label, value string, labelW, durW int) (cell, number string) {
+	return fmt.Sprintf("%-*s", labelW, truncate(label, labelW)), fmt.Sprintf("%*s", durW, value)
+}
+
 type reportModel struct {
 	per period
 }
 
-func newReportModel(now time.Time) reportModel {
-	return reportModel{per: period{unit: unitWeek, ref: now}}
+// newReportModel opens the report on the week around now, normalised to that
+// week's start; see the invariant on period.
+func newReportModel(now time.Time, weekStart time.Weekday) reportModel {
+	return reportModel{per: period{unit: unitWeek, ref: now}.shift(weekStart, 0)}
 }
 
 // runningInPeriod reports whether the frame withRunning appends is counted for
@@ -95,27 +145,45 @@ func runningInPeriod(state *watson.State, p period, weekStart time.Weekday) bool
 	return !start.Before(from) && start.Before(to)
 }
 
-// view renders the report. A running timer counts up to now and is flagged
-// below the totals, matching the overview — both views inform billing.
-func (m reportModel) view(frames []watson.Frame, state *watson.State, weekStart time.Weekday, now time.Time) string {
+// view renders the report into a body of width columns. A running timer counts up
+// to now and is flagged below the totals, matching the overview — both views
+// inform billing.
+//
+// Every line is laid out against the width, because the lines used to be a fixed
+// 43 columns wide: on a narrower body fitBody cut the right edge, and with the
+// number right-aligned the cut took the least significant digits with no ellipsis
+// to show for it ("124h 30m" as "124h 30" at 46 columns, as "124" at 42). The
+// width is the body's, not the terminal's — the caller subtracts the panel.
+func (m reportModel) view(frames []watson.Frame, state *watson.State, weekStart time.Weekday, now time.Time, width int) string {
 	lines, grand := aggregate(withRunning(frames, state, now), m.per, weekStart)
+	durW := reportDurWidth(lines, grand)
+	labelW := reportLayout(width, durW)
+
 	var b strings.Builder
-	b.WriteString(styleTitle.Render("Report — "+m.per.label(weekStart)) + "\n\n")
 	if len(lines) == 0 {
-		b.WriteString(styleDim.Render("keine Frames im Zeitraum") + "\n")
+		b.WriteString(styleDim.Render(truncate("keine Frames im Zeitraum", width)) + "\n")
 	}
 	for _, l := range lines {
-		fmt.Fprintf(&b, "%-32s %10s\n", truncate(l.project, 32), formatDuration(l.total))
+		cell, number := reportRow(l.project, formatDuration(l.total), labelW, durW)
+		b.WriteString(cell + " " + number + "\n")
 		for _, tl := range l.tags {
-			b.WriteString(styleDim.Render(fmt.Sprintf("  [%s]", tl.tag)) +
-				fmt.Sprintf("%*s\n", 42-len("  []")-len([]rune(tl.tag)), formatDuration(tl.d)))
+			// The tag lives in the label column, indented and bracketed, and is cut
+			// there the same way a project name is. Only the label is dimmed: the
+			// number beside it is read off the screen like any other.
+			cell, number := reportRow("  ["+tl.tag+"]", formatDuration(tl.d), labelW, durW)
+			b.WriteString(styleDim.Render(cell) + " " + number + "\n")
 		}
 	}
-	b.WriteString("\n" + styleTitle.Render(fmt.Sprintf("%-32s %10s", "Gesamt", formatDuration(grand))))
+	cell, number := reportRow("Gesamt", formatDuration(grand), labelW, durW)
+	b.WriteString("\n" + styleTitle.Render(cell+" "+number))
 	if runningInPeriod(state, m.per, weekStart) {
-		b.WriteString("\n\n" + styleRunning.Render(fmt.Sprintf("▶ %s läuft (%s) und ist eingerechnet",
-			truncate(state.Project, 32), formatClock(now.Sub(state.Start)))))
+		// Truncated twice: the project name to the label column, then the whole
+		// sentence to the width. The second cut can reach the clock on a very narrow
+		// terminal, but it leaves an ellipsis where fitBody left nothing — and the
+		// running timer's contribution also stands in its project's row above.
+		note := fmt.Sprintf("▶ %s läuft (%s) und ist eingerechnet",
+			truncate(state.Project, labelW), formatClock(now.Sub(state.Start)))
+		b.WriteString("\n\n" + styleRunning.Render(truncate(note, width)))
 	}
-	b.WriteString("\n\n" + styleDim.Render("t/w/m: Zeitraum · [ / ]: verschieben · esc: zurück"))
 	return b.String()
 }
