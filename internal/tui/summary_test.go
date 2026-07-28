@@ -1112,3 +1112,143 @@ func TestSummaryCursorTakesTheRailColumn(t *testing.T) {
 		t.Errorf("the cursor row opens with %q, want %q", got, selectionMarker)
 	}
 }
+
+// TestSummaryWidthSurvivesColour: with colour on, a summary row is four styled
+// pieces — rail, text, the bar's filled head, its track. Every other test in this
+// file runs under the ASCII profile, where all four come out as plain text, so the
+// only path a user ever sees is the one nothing else exercises.
+//
+// What it guards: if any width were computed over a styled string, reportRow's
+// %-*s and truncate would count the escape bytes as columns and pad the line past
+// the body. panel measures by display width and cuts what does not fit, the reset
+// sequence goes with the cut, and the colour bleeds across the rest of the screen.
+// The assertion is the invariant that rules that out — the coloured line occupies
+// exactly as many columns as the plain one.
+func TestSummaryWidthSurvivesColour(t *testing.T) {
+	now := time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local)
+	frames := []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "alpha", now, 3*time.Hour, "code", "review"),
+		mkFrame("b2222222222222222222222222222222", "beta", now.Add(4*time.Hour), 45*time.Minute, "call"),
+	}
+	l := newListModel(now, time.Monday)
+	l.per = period{unit: unitWeek, ref: now}
+	l.refresh(frames, time.Monday, nil, now)
+
+	const width = 100
+	c := summaryColumns(l.rows, width)
+	if c.barW == 0 {
+		t.Fatalf("the fixture must render bars, got barW 0")
+	}
+	for _, cursor := range []int{-1, 1} {
+		l.cursor = cursor
+		plain := make([]int, len(l.rows))
+		for i := range l.rows {
+			plain[i] = lipgloss.Width(l.renderRow(i, width, c))
+		}
+
+		// 0 is termenv.TrueColor; see TestFatalPanelIsErrorColoured for why it is
+		// written as a number.
+		saved := lipgloss.ColorProfile()
+		lipgloss.SetColorProfile(0)
+		styled := make([]string, len(l.rows))
+		for i := range l.rows {
+			styled[i] = l.renderRow(i, width, c)
+		}
+		lipgloss.SetColorProfile(saved)
+
+		coloured := false
+		for i, line := range styled {
+			if strings.Contains(line, "\x1b") {
+				coloured = true
+			}
+			if got := lipgloss.Width(line); got != plain[i] {
+				t.Errorf("cursor %d, row %d: %d columns coloured, %d plain: %q",
+					cursor, i, got, plain[i], line)
+			}
+			if got := lipgloss.Width(line); got > width {
+				t.Errorf("cursor %d, row %d is %d columns, want at most %d", cursor, i, got, width)
+			}
+		}
+		// Teeth: without this the loop above would pass on a profile that never
+		// coloured anything, which is exactly the blind spot it exists to cover.
+		if !coloured {
+			t.Fatal("no row came out styled; the colour profile did not take")
+		}
+	}
+}
+
+// openingSequence returns the escape sequence that opens the run of text s sits
+// in. Read from the rendered line rather than off the style, because a style
+// nobody applied is not a weight anyone sees.
+//
+// Needed because a summary row is rendered from several styled pieces and the
+// first of them is the rail: the sequence at the head of the line says what colour
+// the rail is, not what weight the label carries.
+func openingSequence(line, s string) string {
+	at := strings.Index(line, s)
+	if at <= 0 {
+		return ""
+	}
+	start := strings.LastIndex(line[:at], "\x1b[")
+	if start < 0 {
+		return ""
+	}
+	return line[start:at]
+}
+
+// TestSummaryDayWeightsDiffer: the three weights a day header carries — today,
+// worked, empty. Under the ASCII profile all three render as the same plain text,
+// so nothing else in the suite can tell them apart: swapping two of the styles
+// would leave every other test green while today stopped standing out, which was
+// the whole point of marking it.
+func TestSummaryDayWeightsDiffer(t *testing.T) {
+	// 0 is termenv.TrueColor; see TestFatalPanelIsErrorColoured.
+	saved := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(0)
+	defer lipgloss.SetColorProfile(saved)
+
+	mon := time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local)
+	tue := mon.AddDate(0, 0, 1)
+	frames := []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "alpha", mon, time.Hour, "code"),
+		mkFrame("b2222222222222222222222222222222", "beta", tue, time.Hour, "call"),
+	}
+	l := newListModel(mon, time.Monday)
+	l.per = period{unit: unitWeek, ref: mon}
+	// Tuesday is today, Monday was worked, the rest of the week is empty.
+	l.refresh(frames, time.Monday, nil, tue.Add(3*time.Hour))
+	l.cursor = -1
+
+	c := summaryColumns(l.rows, 100)
+	weights := map[string]string{}
+	for i, r := range l.rows {
+		if r.kind != rowDayHeader {
+			continue
+		}
+		line := l.renderRow(i, 100, c)
+		esc := openingSequence(line, r.title)
+		if esc == "" {
+			t.Fatalf("row %d carries no opening sequence before %q: %q", i, r.title, line)
+		}
+		switch {
+		case r.today:
+			weights["today"] = esc
+		case r.total == 0:
+			weights["empty"] = esc
+		default:
+			weights["worked"] = esc
+		}
+	}
+	for _, k := range []string{"today", "worked", "empty"} {
+		if weights[k] == "" {
+			t.Fatalf("the fixture rendered no %s day", k)
+		}
+	}
+	if weights["today"] == weights["worked"] {
+		t.Errorf("today and a worked day carry the same weight %q — today does not stand out",
+			weights["today"])
+	}
+	if weights["worked"] == weights["empty"] {
+		t.Errorf("a worked and an empty day carry the same weight %q", weights["worked"])
+	}
+}
