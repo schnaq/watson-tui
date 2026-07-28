@@ -22,9 +22,10 @@ grab the matching archive from a
 ## Usage
 
 Start `watson-tui` — it opens on the current week, as a summary: one block per
-day, the projects worked on that day and, under each, its tags. That is the
-question one opens a time tracker with. The individual sessions are one key
-away: `f` switches to the frame list and back.
+day, the projects worked on that day and, under each, its tags — days and
+projects with a bar for how they measure against the strongest day of the
+period. That is the question one opens a time tracker with. The individual
+sessions are one key away: `f` switches to the frame list and back.
 
 | Key | Action |
 |---|---|
@@ -78,14 +79,48 @@ edit dialog (`enter`) and in the delete prompt (`d`). The exact thresholds
 depend on the widest duration in the list — `130h 00m` needs one column more
 than `6h 30m`.
 
-The summary follows the same rule with less to negotiate: it has one elastic
-column, and on a narrow terminal the day, project or tag name is shortened with
-`…` while its duration stays whole. The durations stand in one column across
-day, project and tag rows, and that column is sized to the longest name the
-view actually shows rather than pinned to the right edge of the terminal — so
-the number follows the name it belongs to instead of standing sixty columns
-away from it on a wide screen. Days without a recorded frame are shown, with
-`–` instead of `0m`, so a gap in the week is visible rather than merely absent.
+The summary reads down three columns: a rail that brackets each day, the names
+with their durations, and a bar.
+
+```
+╭ Monday, 2026-07-20    6h 30m  ████████████████████████
+│   kunde-a             4h 00m  ██████████████▊░░░░░░░░░
+│     ├─ meeting        4h 00m
+│     └─ onsite         4h 00m
+│   schnaq              2h 30m  █████████▎░░░░░░░░░░░░░░
+╰     └─ dev            2h 30m
+
+  Tuesday, 2026-07-21        –
+```
+
+The **bar** is a share of the strongest day of the period, one scale for the
+whole view — so a quiet day looks quiet, and the projects of a day add up to
+exactly their day's bar rather than each filling the width. Any duration above
+zero occupies at least a sliver: a row that rendered as nothing would say
+nothing was booked, which is a different claim from "not much was". Tag rows
+carry no bar, because tags are counted individually and two of them on one frame
+would together outrun the project above.
+
+The **rail** opens with `╭` on a day that was worked and closes with `╰` under
+its last line; an empty day gets none. The cursor's `▌` takes that column while
+it is on a row, so the line keeps its width.
+
+The current day's line is **bold** and its rail carries the accent colour, a day
+that was worked is plain, and a day without a recorded frame is dimmed — shown
+all the same, with `–` instead of `0m`, so a gap in the week is visible rather
+than merely absent.
+
+Against the width the summary has one elastic column: the day, project or tag
+name is shortened with `…` while its duration stays whole. The durations stand
+in one column across all three kinds of row, sized to the longest name the view
+actually shows rather than pinned to the right edge of the terminal — so the
+number follows the name it belongs to instead of standing sixty columns away
+from it. The bar is sized last, from what is left, and below ten columns it
+**drops whole**: narrower than that it can no longer tell a tenth from a half,
+and a bar showing the wrong proportion is worse than none — the same rule the
+frame list's ID column follows. A terminal that narrow therefore shows exactly
+what it did before the bar existed. Long project names can use up the room the
+bar wanted, and then it goes for the same reason; the name is the information.
 
 Data directory: `$WATSON_DIR`, otherwise the OS default (macOS:
 `~/Library/Application Support/watson`). Override with `--dir PATH`.

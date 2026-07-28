@@ -136,6 +136,11 @@ type row struct {
 	title string
 	total time.Duration
 	frame watson.Frame
+	// today marks every row of the summary's current day block, its header and the
+	// rows under it alike — the block's rail is coloured from it, and a renderer
+	// that had only the header would have to search backwards to pick a colour.
+	// The frame list does not set it: its day headers are all the same weight.
+	today bool
 }
 
 // selectable reports whether the cursor may rest on this row. Exactly one kind
@@ -443,7 +448,7 @@ func (l *listModel) view(height, width int) string {
 	}
 	// One set of column widths for the whole view, computed once: see
 	// listDurWidth and summaryColumns.
-	c := colWidths{durW: listDurWidth(l.rows)}
+	c := viewLayout{durW: listDurWidth(l.rows)}
 	if l.compact {
 		c = summaryColumns(l.rows, width)
 	}
@@ -456,12 +461,18 @@ func (l *listModel) view(height, width int) string {
 	return b.String()
 }
 
-// colWidths are the column widths one whole view shares, so that its rows line
-// up and scrolling does not move them. The frame list negotiates the rest of its
-// columns per row from durW alone (listLayout); the summary has a second column
-// to size, and sizes both from its rows (summaryColumns).
-type colWidths struct {
-	durW, labelW int
+// viewLayout is what one whole view shares, so that its rows line up and
+// scrolling does not move them. The frame list negotiates the rest of its columns
+// per row from durW alone (listLayout); the summary has a second column to size,
+// and sizes both from its rows (summaryColumns).
+//
+// peak is not a width but belongs here for the same reason the widths do: it is
+// the scale the summary's bars are shares of, and a scale recomputed per screenful
+// would rescale the bars as the reader scrolls. barW is zero when there is no room
+// for a bar that could tell the truth, which is the frame list's state always.
+type viewLayout struct {
+	durW, labelW, barW int
+	peak               time.Duration
 }
 
 // listDurWidth is the width the duration column needs: the widest duration the
@@ -521,7 +532,7 @@ func dayHeaderLine(day string, total time.Duration, width int) string {
 // summary's project and tag rows would have come out as "00:00–00:00" with an
 // empty name, because watson.Frame{}.Duration() is guarded and the zero frame
 // renders rather than panics — the worst way for a missing case to fail.
-func (l *listModel) renderRow(i, width int, c colWidths) string {
+func (l *listModel) renderRow(i, width int, c viewLayout) string {
 	r := l.rows[i]
 	switch r.kind {
 	case rowBlank:
@@ -530,22 +541,25 @@ func (l *listModel) renderRow(i, width int, c colWidths) string {
 		if l.compact {
 			// The summary puts every number in one column, so its day header is laid
 			// out like the rows below it rather than with the frame list's " — " join.
-			return styleDayHeader.Render(summaryRow(r, c, false))
+			// Its bar carries the accent colour while the projects below it stay in the
+			// terminal's own: the day is their sum, and that says so without a glyph.
+			return summaryRow(l.rows, i, c, false).
+				render(summaryRailStyle(r, false), summaryDayStyle(r), styleAccent)
 		}
 		return styleDayHeader.Render(dayHeaderLine(r.title, r.total, width))
 	case rowProject:
-		line := summaryRow(r, c, i == l.cursor)
-		if i == l.cursor {
-			return styleSelected.Render(line)
+		cursor := i == l.cursor
+		p := summaryRow(l.rows, i, c, cursor)
+		if cursor {
+			return p.render(styleSelected, styleSelected, styleSelected)
 		}
-		return line
+		return p.render(summaryRailStyle(r, false), stylePlain, stylePlain)
 	case rowTag:
-		// The bracket encloses the tag and its number both: "[docs  42m]", and it
-		// closes directly behind the number rather than at a right edge of its own.
-		// The number itself stands in the same column as the project and day totals
-		// — the bracket is the one column the tag row has that they do not, so that
-		// a tag line reads as a breakdown of the row above it.
-		return styleDim.Render(summaryRow(r, c, false))
+		// The branch glyph is the one column a tag row has that the project and day
+		// rows do not, which is what makes it read as a breakdown of the row above —
+		// and unlike the bracket it replaced, it also says which tag is the last.
+		return summaryRow(l.rows, i, c, false).
+			render(summaryRailStyle(r, false), styleDim, styleDim)
 	}
 	fr := r.frame
 	rl := listLayout(width, c.durW)

@@ -56,7 +56,7 @@ func TestListKeepsColumnsAlignedPastNinetyNineHours(t *testing.T) {
 			continue
 		}
 		fr := r.frame
-		line := l.renderRow(i, 100, colWidths{durW: durW})
+		line := l.renderRow(i, 100, viewLayout{durW: durW})
 		times := fr.Start.Local().Format("15:04") + "–" + fr.Stop.Local().Format("15:04")
 		_, rest, ok := strings.Cut(line, times)
 		if !ok {
@@ -232,7 +232,7 @@ func TestListLastResortCutsTheNumberVisibly(t *testing.T) {
 	const durW = 8 // "130h 00m", the widest duration in the fixture
 
 	for _, width := range []int{5, 8} {
-		line := l.renderRow(1, width, colWidths{durW: durW})
+		line := l.renderRow(1, width, viewLayout{durW: durW})
 		if w := lipgloss.Width(line); w > width {
 			t.Errorf("width %d: line is %d columns wide: %q", width, w, line)
 		}

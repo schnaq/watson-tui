@@ -19,7 +19,28 @@ import (
 // narrow terminal something to print the name in.
 const (
 	summaryProjectIndent = 2
-	summaryTagIndent     = 6
+	summaryTagIndent     = 4
+)
+
+// The columns the summary spends on things that are not the label or the number:
+// one for the rail glyph plus one of air, and two between the number and the bar.
+const (
+	summaryGutter = 2
+	summaryBarGap = 2
+)
+
+// What the bar may and must have.
+//
+// The cap is there because 150 columns of bar on a wide terminal is decoration,
+// not a reading aid. The floor is the more interesting number: under it a bar can
+// no longer tell a tenth from a half, and it then drops whole rather than shrink
+// — a bar showing the wrong proportion is worse than no bar, the same reason the
+// frame list shows an ID in full or not at all. A terminal below the floor
+// therefore renders exactly what it did before the bar existed, so no new rung is
+// added to the width ladder.
+const (
+	summaryBarMin = 10
+	summaryBarMax = 24
 )
 
 // summaryIndent is how far a row of this kind is indented. The day header sits
@@ -34,14 +55,25 @@ func summaryIndent(k rowKind) int {
 	return 0
 }
 
-// summaryLabel is what a row writes into the label column, indent excluded: a
-// day or project name followed by the em dash that sets its number off, a tag
-// name preceded by the bracket that opens it.
-func summaryLabel(r row) string {
-	if r.kind == rowTag {
-		return "[" + r.title
+// summaryLabel is what row i writes into the label column, indent excluded: a day
+// or project name as it stands, a tag name hanging from the branch that says
+// whether it is the last of its project.
+//
+// No em dash behind the names any more. It used to set the number off; the fixed
+// number column does that, and the rail does it one level up, so the dash only
+// repeated them — for two columns the bar had a use for.
+//
+// Which branch a tag hangs from is a statement about its neighbour, so it is read
+// off the rows here rather than stored on them, for the reason summaryRail gives.
+func summaryLabel(rows []row, i int) string {
+	r := rows[i]
+	if r.kind != rowTag {
+		return r.title
 	}
-	return r.title + " —"
+	if i+1 < len(rows) && rows[i+1].kind == rowTag {
+		return tagBranch + r.title
+	}
+	return tagLast + r.title
 }
 
 // summaryValue is the number a row shows. An empty day reads as a dash: "0m"
@@ -54,14 +86,131 @@ func summaryValue(r row) string {
 	return formatDuration(r.total)
 }
 
-// summaryTail is what follows a row's number: the bracket that closes a tag,
-// nothing on the other kinds. It is deliberately outside the number column, so
-// that every kind of row puts its digits in the same one.
-func summaryTail(k rowKind) string {
-	if k == rowTag {
-		return "]"
+// summaryRail is the glyph row i puts in the rail column: the corner that opens
+// a day block, the line that runs down its side, the corner that closes it.
+//
+// Derived from the rows rather than stored on them, because it is a statement
+// about a row's neighbours and not about the row — a field would have to be kept
+// in step with every change to how the blocks are built, and this cannot fall out
+// of step with anything.
+//
+// The closing corner follows the last row of the block whatever kind that row is,
+// so a last project carrying no tags closes the bracket on itself. rows[i+1]
+// being a day header cannot happen while a day block is always followed by a
+// blank line, and is spelled out anyway: it is the case that would otherwise
+// leave a block hanging open, and it costs one term to rule out.
+//
+// A day with nothing under it has nothing to bracket, so it gets no rail at all —
+// that is what keeps a run of empty days from drawing a rail down a column of
+// dashes. "Nothing under it" is read off the rows, not off the day's total: a
+// frame that starts and stops at the same moment books nothing, so its day reads
+// "–" while still carrying a project row, and a corner keyed on the total would
+// go missing above a block that draws one.
+func summaryRail(rows []row, i int) string {
+	r := rows[i]
+	switch {
+	case r.kind == rowBlank:
+		return ""
+	case r.kind == rowDayHeader:
+		if i+1 < len(rows) && rows[i+1].kind == rowProject {
+			return railOpen
+		}
+		return ""
+	case i+1 >= len(rows), rows[i+1].kind == rowBlank, rows[i+1].kind == rowDayHeader:
+		return railClose
 	}
-	return ""
+	return railMid
+}
+
+// summaryDayStyle is the weight a day header carries. Three of them, because the
+// three questions one asks of a day list are different: which day is today, which
+// days were worked, and where the gaps are. Bold marks today even when it has
+// booked nothing yet — a day one is standing in is worth seeing before it fills up.
+func summaryDayStyle(r row) lipgloss.Style {
+	switch {
+	case r.today:
+		return styleDayHeader
+	case r.total == 0:
+		return styleDim
+	}
+	return styleDayPlain
+}
+
+// summaryRailStyle colours the rail: the accent for the block of the current day,
+// dim for the others. Together with the bold day header that is the second of
+// today's two signals, and it needs no glyph of its own — one in the gutter would
+// have had to displace the corner that opens the block.
+func summaryRailStyle(r row, cursor bool) lipgloss.Style {
+	switch {
+	case cursor:
+		return styleSelected
+	case r.today:
+		return styleAccent
+	}
+	return styleDim
+}
+
+// summaryPeak is the scale every bar of the view is a share of: the largest day
+// total in it. One scale for the whole view rather than one per day, so that a
+// quiet day looks quiet — and because the projects of a day then add up to exactly
+// their day's bar, which makes it read as their sum instead of a second scale.
+//
+// Day rows only. A project or tag total can never exceed the day it sits in, so
+// measuring them would change nothing today and would let a later kind of row move
+// the scale. Computed over every row of the view, not only the visible ones, so
+// scrolling does not rescale the bars under the reader — the same reason
+// summaryColumns and listDurWidth give.
+//
+// Zero when the period holds no frames, or a filter matched none. That is the
+// guard on the division in summaryBar as much as it is an answer.
+func summaryPeak(rows []row) time.Duration {
+	var peak time.Duration
+	for _, r := range rows {
+		if r.kind == rowDayHeader {
+			peak = max(peak, r.total)
+		}
+	}
+	return peak
+}
+
+// summaryBarWidth is how many columns the bar gets: what the label and number
+// columns left, capped, or nothing at all below the floor.
+//
+// The order matters and is deliberate. The label column is sized from the data
+// first and the bar takes the remainder, so on a wide terminal with very long
+// project names the bar can be gone while space looks free. The other way round —
+// reserving the bar and truncating names into it — would put the decoration ahead
+// of the information, and sizing the label column from its own content is exactly
+// what the commit before this one was for.
+func summaryBarWidth(width, labelW, durW int) int {
+	left := width - summaryGutter - labelW - 1 - durW - summaryBarGap
+	if left < summaryBarMin {
+		return 0
+	}
+	return min(left, summaryBarMax)
+}
+
+// summaryBar renders d as a share of peak across w columns, the filled part and
+// the track behind it apart.
+//
+// Apart, because the two are coloured differently and a line assembled from
+// styled pieces cannot be measured: %-*s and truncate count the escape bytes as
+// columns, so the line comes out too long, panel cuts it by display width, the
+// reset sequence goes with the cut and the colour bleeds across the rest of the
+// screen. Everything here is plain text, and every width is arithmetic on it.
+//
+// Any duration above zero occupies at least the thinnest eighth. A row that
+// rendered as nothing would say nothing was booked, which is a different claim
+// from "not much was" — and in the "all" period, where one strong day sets the
+// scale, that floor is what keeps the quiet days on the screen.
+func summaryBar(d, peak time.Duration, w int) (filled, track string) {
+	if peak <= 0 || d <= 0 || w <= 0 {
+		return "", ""
+	}
+	eighths := int(float64(d)/float64(peak)*float64(w*8) + 0.5)
+	eighths = min(max(eighths, 1), w*8)
+	filled = strings.Repeat(barFull, eighths/8) + barEighths[eighths%8]
+	return filled, strings.Repeat(barTrack, w-lipgloss.Width(filled))
 }
 
 // summaryColumns sizes the summary's two columns from the rows themselves: the
@@ -81,44 +230,88 @@ func summaryTail(k rowKind) string {
 // does not move the columns under the reader — the same reason listDurWidth
 // gives.
 //
-// Only the label gives way to the width. Under about ten columns of body not
-// even the number and a tag's closing bracket fit; the bracket is then clipped
-// by the panel, the way report.go's last column is, and no ladder is spent on a
-// terminal that narrow.
-func summaryColumns(rows []row, width int) colWidths {
-	var c colWidths
-	tail := 0
-	for _, r := range rows {
+// Only the label gives way to the width, and it gives way against the body less
+// the gutter, which is a fixed cost the rail column takes off the top. Under about
+// ten columns of body not even the number fits; it is then clipped by the panel,
+// the way report.go's last column is, and no ladder is spent on a terminal that
+// narrow.
+//
+// The bar is sized last, from what the two columns left. See summaryBarWidth for
+// why that order and not the other one.
+func summaryColumns(rows []row, width int) viewLayout {
+	var c viewLayout
+	for i, r := range rows {
 		if r.kind == rowBlank {
 			continue
 		}
 		c.durW = max(c.durW, lipgloss.Width(summaryValue(r)))
-		c.labelW = max(c.labelW, summaryIndent(r.kind)+lipgloss.Width(summaryLabel(r)))
-		tail = max(tail, lipgloss.Width(summaryTail(r.kind)))
+		c.labelW = max(c.labelW, summaryIndent(r.kind)+lipgloss.Width(summaryLabel(rows, i)))
 	}
-	c.labelW = fitLabelWidth(c.labelW, width, c.durW+tail)
+	c.labelW = fitLabelWidth(c.labelW, width-summaryGutter, c.durW)
+	c.barW = summaryBarWidth(width, c.labelW, c.durW)
+	c.peak = summaryPeak(rows)
 	return c
 }
 
-// summaryRow lays one row out: the indent, then the label and number columns
-// reportRow builds, then whatever closes the line. The label is truncated with
-// an ellipsis when it must give way and the number never is — the rule the frame
-// list, the report and the overview all follow.
+// summaryParts is one summary row as plain text, cut where its colour changes.
 //
-// The indent is what gives way first, before the name: below it the label column
-// would otherwise be pushed past its width by rows that are only indented, and
-// the numbers of the deepest rows would drift out of the column the others use.
-func summaryRow(r row, c colWidths, cursor bool) string {
-	indent := min(summaryIndent(r.kind), c.labelW)
-	cell, number := reportRow(summaryLabel(r), summaryValue(r), c.labelW-indent, c.durW)
-	lead := strings.Repeat(" ", indent)
-	if cursor && indent > 0 {
-		// The marker replaces the first column of the indent instead of being
-		// prepended, so the line keeps its width and the numbers stay in their
-		// column on the cursor row too.
-		lead = selectionMarker + strings.Repeat(" ", indent-1)
+// Cut rather than returned as one string, because the pieces are coloured
+// differently and a line assembled from styled pieces can no longer be measured:
+// reportRow's %-*s and truncate count escape bytes as columns. The width of every
+// piece here is arithmetic on plain text; renderRow puts the colour on afterwards.
+type summaryParts struct {
+	rail   string // the gutter: the rail glyph or the cursor marker, plus its air
+	body   string // indent, label, number — and the gap in front of the bar
+	filled string // the bar's filled head
+	track  string // the bar's remainder
+}
+
+// render puts the three colours on: the rail, the text of the row, and the bar's
+// filled head. The track is always dim — it is the absence the bar is measured
+// against, and on the cursor row too it must not compete with the head.
+func (p summaryParts) render(rail, text, bar lipgloss.Style) string {
+	return rail.Render(p.rail) + text.Render(p.body) + bar.Render(p.filled) + styleDim.Render(p.track)
+}
+
+// summaryRow lays row i out: the rail column, the indent, the label and number
+// columns reportRow builds, and the bar. The label is truncated with an ellipsis
+// when it must give way and the number never is — the rule the frame list, the
+// report and the overview all follow.
+//
+// The marker replaces the rail glyph rather than being prepended, so the line keeps
+// its width and the numbers stay in their column on the cursor row too. It wins
+// over a closing corner: where the cursor stands is the more urgent of the two, and
+// the corner comes back with the next keystroke.
+//
+// The indent gives way before the name: below it the label column would otherwise
+// be pushed past its width by rows that are only indented, and the numbers of the
+// deepest rows would drift out of the column the others use.
+//
+// Tag rows carry no bar. Tags are counted individually, so a frame with two of them
+// counts under both, and their bars would together outrun the project's — claiming
+// a division of it that is not there.
+func summaryRow(rows []row, i int, c viewLayout, cursor bool) summaryParts {
+	r := rows[i]
+	glyph := summaryRail(rows, i)
+	if cursor {
+		glyph = selectionMarker
 	}
-	return lead + cell + " " + number + summaryTail(r.kind)
+	if glyph == "" {
+		glyph = " "
+	}
+	p := summaryParts{rail: glyph + strings.Repeat(" ", summaryGutter-1)}
+
+	indent := min(summaryIndent(r.kind), c.labelW)
+	cell, number := reportRow(summaryLabel(rows, i), summaryValue(r), c.labelW-indent, c.durW)
+	p.body = strings.Repeat(" ", indent) + cell + " " + number
+
+	if r.kind != rowTag {
+		p.filled, p.track = summaryBar(r.total, c.peak, c.barW)
+		if p.filled != "" {
+			p.body += strings.Repeat(" ", summaryBarGap)
+		}
+	}
+	return p
 }
 
 // buildSummaryRows renders the period as day blocks. The numbers come from
@@ -149,24 +342,32 @@ func buildSummaryRows(frames []watson.Frame, p period, weekStart time.Weekday,
 	}
 	days := summaryDays(frames, p, weekStart)
 
+	today := localDay(now)
 	var rows []row
+	prevEmpty := false
 	for _, day := range days {
-		if len(rows) > 0 {
-			rows = append(rows, row{kind: rowBlank})
-		}
 		dayPeriod := period{unit: unitDay, ref: day}
 		lines, total := aggregate(byDay[localDay(day)], dayPeriod, weekStart)
+		empty := len(lines) == 0
+		isToday := localDay(day) == today
+		// A blank line stands between two day blocks — but not between two empty
+		// ones: a quiet second half of the week would otherwise spend ten lines on
+		// five dashes. Nothing separates the projects within a day any more; the
+		// rail does that, and while a project boundary carried the same blank line
+		// as a day boundary the view had no blocks, only a list.
+		runTogether := empty && prevEmpty
+		if len(rows) > 0 && !runTogether {
+			rows = append(rows, row{kind: rowBlank})
+		}
+		prevEmpty = empty
 		// The day's total is aggregate's grand total, not the sum of the tag rows
 		// below it: a frame carrying two tags is counted under both, so adding the
 		// tag rows up would book it twice.
-		rows = append(rows, row{kind: rowDayHeader, title: formatDay(day), total: total})
-		for i, l := range lines {
-			if i > 0 {
-				rows = append(rows, row{kind: rowBlank})
-			}
-			rows = append(rows, row{kind: rowProject, title: l.project, total: l.total})
+		rows = append(rows, row{kind: rowDayHeader, title: formatDay(day), total: total, today: isToday})
+		for _, l := range lines {
+			rows = append(rows, row{kind: rowProject, title: l.project, total: l.total, today: isToday})
 			for _, tl := range l.tags {
-				rows = append(rows, row{kind: rowTag, title: tl.tag, total: tl.d})
+				rows = append(rows, row{kind: rowTag, title: tl.tag, total: tl.d, today: isToday})
 			}
 		}
 	}

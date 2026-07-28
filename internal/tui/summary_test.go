@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -49,16 +50,23 @@ func TestSummaryGroupsDaysProjectsAndTags(t *testing.T) {
 		t.Errorf("first day = %q", days[0])
 	}
 
-	// A blank line stands before every day but the first, so the blocks read
-	// apart. Pinned here rather than in the one-day test below, which never has
-	// a second day header to be separated from.
+	// A blank line stands between two day blocks, but not between two empty ones.
+	// Monday and Tuesday carry frames here, so Tuesday and the Wednesday behind it
+	// open with one; Thursday to Sunday each follow an empty day and do not.
+	// Pinned here rather than in the one-day test below, which never has a second
+	// day header to be separated from.
 	if rows[0].kind == rowBlank {
 		t.Errorf("no blank row stands before the first day")
 	}
+	var opened []string
 	for i, r := range rows {
-		if r.kind == rowDayHeader && i > 0 && rows[i-1].kind != rowBlank {
-			t.Errorf("day header %q at row %d is not preceded by a blank", r.title, i)
+		if r.kind == rowDayHeader && i > 0 && rows[i-1].kind == rowBlank {
+			opened = append(opened, r.title)
 		}
+	}
+	wantOpened := []string{"Tuesday, 2026-07-21", "Wednesday, 2026-07-22"}
+	if !slices.Equal(opened, wantOpened) {
+		t.Errorf("blank lines open %v, want %v", opened, wantOpened)
 	}
 
 	// Monday: alpha (3h) before beta (1h), each followed by its tag.
@@ -83,10 +91,11 @@ func TestSummaryGroupsDaysProjectsAndTags(t *testing.T) {
 	}
 }
 
-// TestSummaryNestsRowsAndSeparatesProjects pins the exact sequence of kinds for
-// one day with two projects: the tags sit under their project, a blank line
-// separates the project blocks, and none stands before the first day.
-func TestSummaryNestsRowsAndSeparatesProjects(t *testing.T) {
+// TestSummaryNestsTagsUnderTheirProject pins the exact sequence of kinds for one
+// day with two projects: each tag sits under its project, nothing separates the
+// two project blocks — the rail does that now — and no blank stands before the
+// first day.
+func TestSummaryNestsTagsUnderTheirProject(t *testing.T) {
 	mon := time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local)
 	frames := []watson.Frame{
 		mkFrame("a1111111111111111111111111111111", "alpha", mon, 3*time.Hour, "code"),
@@ -94,7 +103,7 @@ func TestSummaryNestsRowsAndSeparatesProjects(t *testing.T) {
 	}
 	rows := buildSummaryRows(frames, period{unit: unitDay, ref: mon}, time.Monday, "", nil, mon)
 
-	want := []rowKind{rowDayHeader, rowProject, rowTag, rowBlank, rowProject, rowTag}
+	want := []rowKind{rowDayHeader, rowProject, rowTag, rowProject, rowTag}
 	got := kinds(rows)
 	if len(got) != len(want) {
 		t.Fatalf("row kinds = %v, want %v", got, want)
@@ -382,14 +391,12 @@ func TestSummaryRowsEndInTheirNumber(t *testing.T) {
 		if w := lipgloss.Width(line); w > width {
 			t.Errorf("row %d (kind %d) is %d columns, want at most %d: %q", i, r.kind, w, width, line)
 		}
-		// Nothing but the closing bracket may follow the number. A pad after it
-		// would take that row's digits out of the column its neighbours use.
+		// Nothing but the bar may follow the number. A pad between the two would take
+		// that row's digits out of the column its neighbours use.
 		want := formatDuration(r.total)
-		if r.kind == rowTag {
-			want += "]"
-		}
-		if !strings.HasSuffix(line, want) {
-			t.Errorf("row %d (kind %d) does not end in %q: %q", i, r.kind, want, line)
+		if !strings.HasSuffix(stripBar(line), want) {
+			t.Errorf("row %d (kind %d) does not end in %q once its bar is taken off: %q",
+				i, r.kind, want, line)
 		}
 	}
 	// Teeth for the teeth: all three kinds have to have been rendered, or a
@@ -411,6 +418,21 @@ type summaryColumn struct {
 	gap    int // blank columns between the end of the name and the first digit
 }
 
+// stripBar takes the bar and the gap in front of it off the end of a rendered row,
+// leaving the line to end in its number. The alignment tests all read the number
+// off the end, and a day or project row now ends in its bar instead.
+func stripBar(line string) string {
+	runes := []rune(line)
+	end := len(runes)
+	for end > 0 && strings.ContainsRune(barGlyphs, runes[end-1]) {
+		end--
+	}
+	for end > 0 && runes[end-1] == ' ' {
+		end--
+	}
+	return string(runes[:end])
+}
+
 // summaryColumnsOf renders every non-blank row of l into a body of width columns
 // and reads the two numbers off the rendered line — not off the widths
 // summaryColumns computed, which would only restate the arithmetic under test
@@ -428,12 +450,12 @@ func summaryColumnsOf(t *testing.T, l *listModel, width int) []summaryColumn {
 		if strings.Contains(line, "\x1b") {
 			t.Fatalf("row %d is styled (CLICOLOR_FORCE?); its columns cannot be counted: %q", i, line)
 		}
-		runes := []rune(line)
-		value, tail := summaryValue(r), summaryTail(r.kind)
-		end := len(runes) - len([]rune(tail))
+		runes := []rune(stripBar(line))
+		value := summaryValue(r)
+		end := len(runes)
 		start := end - len([]rune(value))
 		if start < 0 || string(runes[start:end]) != value {
-			t.Fatalf("row %d does not end in its number %q: %q", i, value+tail, line)
+			t.Fatalf("row %d does not end in its number %q: %q", i, value, line)
 		}
 		name := start
 		for name > 0 && runes[name-1] == ' ' {
@@ -513,9 +535,14 @@ func TestSummaryCursorDoesNotMoveTheNumbers(t *testing.T) {
 		if !strings.Contains(marked, selectionMarker) {
 			t.Fatalf("the cursor row %q carries no %q marker", marked, selectionMarker)
 		}
-		// Put the column the marker took back and the two rows have to be the same
-		// line — which says it replaced a column of the indent and nothing else.
-		if restored := strings.Replace(marked, selectionMarker, " ", 1); restored != plain {
+		// The marker takes the rail's column, so the two rows differ in that one
+		// column and are identical behind it — which is what says it replaced the
+		// rail glyph rather than pushing the line right.
+		if lipgloss.Width(marked) != lipgloss.Width(plain) {
+			t.Errorf("row %d is %d columns under the cursor and %d without it:\n  plain  %q\n  cursor %q",
+				i, lipgloss.Width(marked), lipgloss.Width(plain), plain, marked)
+		}
+		if rest, plainRest := string([]rune(marked)[1:]), string([]rune(plain)[1:]); rest != plainRest {
 			t.Errorf("row %d shifts under the cursor:\n  plain  %q\n  cursor %q", i, plain, marked)
 		}
 		checked++
@@ -625,5 +652,463 @@ func TestSummaryBucketsFramesByTheirLocalDay(t *testing.T) {
 		if r.kind == rowDayHeader && r.title == "Monday, 2026-07-20" && r.total != 90*time.Minute {
 			t.Errorf("Monday books %v, want 1h 30m", r.total)
 		}
+	}
+}
+
+// TestSummaryRailBracketsTheDayBlock: the rail glyph follows where a row sits in
+// its day block, which is what makes a block read as a block. An empty day has
+// nothing to bracket and gets no rail.
+func TestSummaryRailBracketsTheDayBlock(t *testing.T) {
+	rows := []row{
+		{kind: rowDayHeader, title: "Monday, 2026-07-20", total: 4 * time.Hour},
+		{kind: rowProject, title: "alpha", total: 3 * time.Hour},
+		{kind: rowTag, title: "code", total: 3 * time.Hour},
+		{kind: rowProject, title: "beta", total: time.Hour},
+		{kind: rowTag, title: "call", total: time.Hour},
+		{kind: rowBlank},
+		{kind: rowDayHeader, title: "Tuesday, 2026-07-21"},
+		{kind: rowDayHeader, title: "Wednesday, 2026-07-22"},
+	}
+	want := []string{"╭", "│", "│", "│", "╰", "", "", ""}
+	for i, w := range want {
+		if got := summaryRail(rows, i); got != w {
+			t.Errorf("row %d (%q): rail = %q, want %q", i, rows[i].title, got, w)
+		}
+	}
+}
+
+// TestSummaryRailClosesOnAProjectWithoutTags: the closing glyph follows the last
+// row of the block whatever kind it is. A project carrying no tags is the last
+// row itself, and the bracket still has to close on it.
+func TestSummaryRailClosesOnAProjectWithoutTags(t *testing.T) {
+	rows := []row{
+		{kind: rowDayHeader, title: "Monday, 2026-07-20", total: time.Hour},
+		{kind: rowProject, title: "alpha", total: time.Hour},
+	}
+	if got := summaryRail(rows, 1); got != "╰" {
+		t.Errorf("rail on the last row of the view = %q, want %q", got, "╰")
+	}
+}
+
+// TestSummaryRunsEmptyDaysTogether: a blank line stands between two day blocks
+// unless both are empty. A quiet second half of the week otherwise spends ten
+// lines on five dashes.
+func TestSummaryRunsEmptyDaysTogether(t *testing.T) {
+	mon := time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local)
+	frames := []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "alpha", mon, 3*time.Hour, "code"),
+	}
+	rows := buildSummaryRows(frames, period{unit: unitWeek, ref: mon}, time.Monday, "", nil, mon)
+
+	blanks := 0
+	for _, r := range rows {
+		if r.kind == rowBlank {
+			blanks++
+		}
+	}
+	// One: between Monday's block and Tuesday. The five days after Tuesday are
+	// empty and follow an empty day, so none of them opens with one.
+	if blanks != 1 {
+		t.Errorf("a week with one booked day holds %d blank rows, want 1", blanks)
+	}
+}
+
+// TestSummaryRailWithAFilteredEmptyDayInTheMiddle: a filter can empty a day that
+// the period still lists, which is the only way a day header without a rail comes
+// to stand between two bracketed blocks. The bounded-period cases put their empty
+// days at the end, so they never exercise it.
+func TestSummaryRailWithAFilteredEmptyDayInTheMiddle(t *testing.T) {
+	mon := time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local)
+	frames := []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "alpha", mon, 3*time.Hour, "code"),
+		mkFrame("b2222222222222222222222222222222", "beta", mon.AddDate(0, 0, 1), time.Hour, "call"),
+		mkFrame("c3333333333333333333333333333333", "alpha", mon.AddDate(0, 0, 2), time.Hour, "docs"),
+	}
+	rows := buildSummaryRows(frames, period{unit: unitWeek, ref: mon}, time.Monday, "alpha", nil, mon)
+
+	// Monday and Wednesday are bracketed, Tuesday is empty between them, and the
+	// four days after Wednesday carry neither a rail nor a blank line.
+	var got []string
+	for i, r := range rows {
+		if r.kind == rowDayHeader {
+			got = append(got, summaryRail(rows, i))
+		}
+	}
+	want := []string{railOpen, "", railOpen, "", "", "", ""}
+	if len(got) != len(want) {
+		t.Fatalf("got %d day headers, want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("day header %d: rail = %q, want %q", i, got[i], want[i])
+		}
+	}
+	// Three blanks: before Tuesday, before Wednesday and before Thursday — each of
+	// those three neighbours a day that carries frames. Friday, Saturday and
+	// Sunday follow an empty day and open with nothing.
+	blanks := 0
+	for _, r := range rows {
+		if r.kind == rowBlank {
+			blanks++
+		}
+	}
+	if blanks != 3 {
+		t.Errorf("holds %d blank rows, want 3 (before Tuesday, Wednesday and Thursday)", blanks)
+	}
+}
+
+// TestSummaryRailFollowsTheBlockNotTheTotal: a frame that starts and stops at the
+// same moment books nothing, so its day header reads "–" — but the day still has
+// a project row under it. The rail has to bracket what is there, or the corner
+// goes missing above a block that draws one.
+//
+// A degenerate frame, and exactly the kind of input that makes two conditions
+// derived from different things disagree: "shows a dash" is about the total,
+// "opens a block" is about the rows.
+func TestSummaryRailFollowsTheBlockNotTheTotal(t *testing.T) {
+	mon := time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local)
+	frames := []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "alpha", mon, 0, "code"),
+	}
+	rows := buildSummaryRows(frames, period{unit: unitDay, ref: mon}, time.Monday, "", nil, mon)
+
+	if len(rows) < 2 || rows[0].kind != rowDayHeader || rows[1].kind != rowProject {
+		t.Fatalf("expected a day header with a project under it, got %v", kinds(rows))
+	}
+	if rows[0].total != 0 {
+		t.Fatalf("the day books %v, want nothing — the fixture is wrong", rows[0].total)
+	}
+	if got := summaryRail(rows, 0); got != railOpen {
+		t.Errorf("rail on a day header with rows under it = %q, want %q", got, railOpen)
+	}
+}
+
+// TestSummaryPeakIsTheLargestDayTotal: the scale every bar in the view is a share
+// of. Day totals only — a project or tag row can never exceed the day it sits in,
+// so measuring them would only invite a later kind of row to move the scale.
+func TestSummaryPeakIsTheLargestDayTotal(t *testing.T) {
+	rows := []row{
+		{kind: rowDayHeader, total: 2 * time.Hour},
+		{kind: rowProject, total: 2 * time.Hour},
+		{kind: rowBlank},
+		{kind: rowDayHeader, total: 5 * time.Hour},
+		{kind: rowProject, total: 5 * time.Hour},
+	}
+	if got := summaryPeak(rows); got != 5*time.Hour {
+		t.Errorf("peak = %v, want 5h", got)
+	}
+}
+
+// TestSummaryPeakOfAnEmptyPeriodIsZero: a period without a single frame — or a
+// filter without a match — has no scale, and the division that would size a bar
+// has to be guarded somewhere.
+func TestSummaryPeakOfAnEmptyPeriodIsZero(t *testing.T) {
+	rows := []row{{kind: rowDayHeader}, {kind: rowBlank}, {kind: rowDayHeader}}
+	if got := summaryPeak(rows); got != 0 {
+		t.Errorf("peak = %v, want 0", got)
+	}
+}
+
+// TestSummaryBarWidthTakesWhatIsLeftUpToTheCap: the bar is computed after the
+// label and number columns stand, so it can only have what they left. Capped,
+// because 150 columns of bar on a wide terminal is not a reading aid.
+func TestSummaryBarWidthTakesWhatIsLeftUpToTheCap(t *testing.T) {
+	if got := summaryBarWidth(100, 23, 6); got != summaryBarMax {
+		t.Errorf("bar width at 100 columns = %d, want the cap %d", got, summaryBarMax)
+	}
+	// Between the floor and the cap the bar takes exactly what is left: 52 columns
+	// less the two of gutter, the label's 23, the separator, the number's 6 and the
+	// two of gap.
+	if got := summaryBarWidth(52, 23, 6); got != 18 {
+		t.Errorf("bar width at 52 columns = %d, want 18", got)
+	}
+}
+
+// TestSummaryBarWidthDropsWholeRatherThanLie: under summaryBarMin a bar can no
+// longer tell a tenth from a half, and a bar that shows the wrong proportion is
+// worse than none — the rule the frame list's ID column follows for the same kind
+// of reason.
+func TestSummaryBarWidthDropsWholeRatherThanLie(t *testing.T) {
+	// 44 columns is the narrowest that still carries one, at exactly the minimum.
+	if got := summaryBarWidth(44, 23, 6); got != summaryBarMin {
+		t.Errorf("bar width at 44 columns = %d, want %d", got, summaryBarMin)
+	}
+	if got := summaryBarWidth(43, 23, 6); got != 0 {
+		t.Errorf("bar width at 43 columns = %d, want 0 — no bar at all", got)
+	}
+}
+
+// TestSummaryBarFillsTheWidthBetweenItsTwoParts: filled part and track come back
+// apart so that renderRow can colour them differently, and together they are
+// exactly the width they were given — the line's width is arithmetic on plain
+// text, before any style is applied.
+func TestSummaryBarFillsTheWidthBetweenItsTwoParts(t *testing.T) {
+	for _, tc := range []struct{ d, peak time.Duration }{
+		{8 * time.Hour, 8 * time.Hour},
+		{4 * time.Hour, 8 * time.Hour},
+		{30 * time.Minute, 8 * time.Hour},
+		{time.Minute, 100 * time.Hour},
+	} {
+		filled, track := summaryBar(tc.d, tc.peak, 16)
+		if got := lipgloss.Width(filled) + lipgloss.Width(track); got != 16 {
+			t.Errorf("%v of %v: filled %q plus track %q is %d columns, want 16",
+				tc.d, tc.peak, filled, track, got)
+		}
+	}
+}
+
+// TestSummaryBarUsesEighthsToPlaceAPartialColumn: full blocks alone would round a
+// day and a half of work down to the same length as a day of it.
+func TestSummaryBarUsesEighthsToPlaceAPartialColumn(t *testing.T) {
+	// Half of one column: 30 minutes of an eight-hour peak over eight columns.
+	filled, _ := summaryBar(30*time.Minute, 8*time.Hour, 8)
+	if filled != "▌" {
+		t.Errorf("filled = %q, want a half block", filled)
+	}
+	// Four columns and a half.
+	filled, _ = summaryBar(4*time.Hour+30*time.Minute, 8*time.Hour, 8)
+	if filled != "████▌" {
+		t.Errorf("filled = %q, want four blocks and a half", filled)
+	}
+}
+
+// TestSummaryBarShowsAnythingAboveZero: a minute against a hundred hours rounds to
+// no columns at all, and a row rendering as nothing claims nothing was booked. The
+// floor is what keeps the small days of the "all" period on the screen.
+func TestSummaryBarShowsAnythingAboveZero(t *testing.T) {
+	filled, _ := summaryBar(time.Minute, 100*time.Hour, 16)
+	if filled == "" {
+		t.Error("a minute of a hundred hours renders as nothing at all")
+	}
+}
+
+// TestSummaryBarWithoutAScaleIsNothing: no frames means no peak, and a bar is a
+// share of something. Also the guard on the division.
+func TestSummaryBarWithoutAScaleIsNothing(t *testing.T) {
+	filled, track := summaryBar(time.Hour, 0, 16)
+	if filled != "" || track != "" {
+		t.Errorf("filled %q track %q, want both empty", filled, track)
+	}
+	filled, track = summaryBar(0, 8*time.Hour, 16)
+	if filled != "" || track != "" {
+		t.Errorf("a day that booked nothing draws filled %q track %q, want both empty", filled, track)
+	}
+}
+
+// TestSummaryMarksEveryRowOfTodaysBlock: the mark sits on every row of the current
+// day, not only its header, because the rail of the whole block is coloured from
+// it. Deriving it per row beats making the renderer search back to the nearest day
+// header to pick a colour.
+func TestSummaryMarksEveryRowOfTodaysBlock(t *testing.T) {
+	mon := time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local)
+	tue := mon.AddDate(0, 0, 1)
+	frames := []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "alpha", mon, time.Hour, "code"),
+		mkFrame("b2222222222222222222222222222222", "beta", tue, time.Hour, "call"),
+	}
+	rows := buildSummaryRows(frames, period{unit: unitWeek, ref: mon}, time.Monday, "", nil,
+		tue.Add(3*time.Hour))
+
+	marked := 0
+	block := ""
+	for i, r := range rows {
+		if r.kind == rowDayHeader {
+			block = r.title
+		}
+		if r.kind == rowBlank {
+			continue
+		}
+		want := block == "Tuesday, 2026-07-21"
+		if r.today != want {
+			t.Errorf("row %d (%q under %q): today = %v, want %v", i, r.title, block, r.today, want)
+		}
+		if r.today {
+			marked++
+		}
+	}
+	// Tuesday's header, its one project and its one tag.
+	if marked != 3 {
+		t.Errorf("%d rows carry the mark, want 3", marked)
+	}
+}
+
+// TestSummaryMarksNothingInAPeriodWithoutToday: looking at last week, no day is
+// the current one, so no row may be emphasised as such.
+func TestSummaryMarksNothingInAPeriodWithoutToday(t *testing.T) {
+	mon := time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local)
+	frames := []watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "alpha", mon, time.Hour, "code"),
+	}
+	rows := buildSummaryRows(frames, period{unit: unitWeek, ref: mon}, time.Monday, "", nil,
+		mon.AddDate(0, 0, 14))
+
+	for i, r := range rows {
+		if r.today {
+			t.Errorf("row %d (%q) is marked as today in a week that does not hold it", i, r.title)
+		}
+	}
+}
+
+// barGlyphs is every rune a bar may be built from, for asserting that a line ends
+// in one without restating how it is drawn.
+const barGlyphs = barFull + barTrack + "▏▎▍▌▋▊▉"
+
+// summaryTestModel is a summary of the given frames, rendered plain: the cursor is
+// parked off the list so no row is styled and columns can be counted in the text.
+func summaryTestModel(frames []watson.Frame, now time.Time) listModel {
+	l := newListModel(now, time.Monday)
+	l.per = period{unit: unitDay, ref: now}
+	l.refresh(frames, time.Monday, nil, now)
+	l.cursor = -1
+	return l
+}
+
+// TestSummaryRowsOpenWithTheRail: the rail is the first thing on the line, in a
+// column of its own — that is what makes a day block read as a block rather than
+// as three indent levels that happen to follow each other.
+func TestSummaryRowsOpenWithTheRail(t *testing.T) {
+	now := time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local)
+	l := summaryTestModel([]watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "alpha", now, 3*time.Hour, "code"),
+	}, now)
+
+	c := summaryColumns(l.rows, 60)
+	for i, r := range l.rows {
+		if r.kind == rowBlank {
+			continue
+		}
+		line := l.renderRow(i, 60, c)
+		want := summaryRail(l.rows, i)
+		if want == "" {
+			want = " "
+		}
+		if got := string([]rune(line)[0]); got != want {
+			t.Errorf("row %d (%q) opens with %q, want the rail %q", i, r.title, got, want)
+		}
+	}
+}
+
+// TestSummaryTagRowsHangFromABranch: a tag row says which project it breaks down
+// and whether it is the last of them. The square bracket it used to carry did the
+// first and not the second.
+func TestSummaryTagRowsHangFromABranch(t *testing.T) {
+	now := time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local)
+	l := summaryTestModel([]watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "alpha", now, 3*time.Hour, "code", "review"),
+	}, now)
+
+	c := summaryColumns(l.rows, 60)
+	var branches []string
+	for i, r := range l.rows {
+		line := l.renderRow(i, 60, c)
+		if strings.ContainsAny(line, "[]") {
+			t.Errorf("row %d still carries a bracket: %q", i, line)
+		}
+		if r.kind == rowTag {
+			switch {
+			case strings.Contains(line, tagLast):
+				branches = append(branches, "last")
+			case strings.Contains(line, tagBranch):
+				branches = append(branches, "branch")
+			default:
+				t.Errorf("tag row %d hangs from nothing: %q", i, line)
+			}
+		}
+	}
+	// Two tags on one project: the first branches, the second closes.
+	if want := []string{"branch", "last"}; !slices.Equal(branches, want) {
+		t.Errorf("tag glyphs = %v, want %v", branches, want)
+	}
+}
+
+// TestSummaryDropsTheEmDash: the dash used to set a number off from its name. The
+// fixed number column does that, and the rail does it one level up, so the dash
+// only repeated them — at the price of two columns the bar wanted.
+func TestSummaryDropsTheEmDash(t *testing.T) {
+	now := time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local)
+	l := summaryTestModel([]watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "alpha", now, 3*time.Hour, "code"),
+	}, now)
+
+	c := summaryColumns(l.rows, 60)
+	for i := range l.rows {
+		if line := l.renderRow(i, 60, c); strings.Contains(line, "—") {
+			t.Errorf("row %d still carries an em dash: %q", i, line)
+		}
+	}
+}
+
+// TestSummaryDayAndProjectRowsEndInTheirBar: the bar is the last thing on the line
+// and fills its column exactly, so the rows line up down the right edge as well as
+// the left.
+func TestSummaryDayAndProjectRowsEndInTheirBar(t *testing.T) {
+	now := time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local)
+	l := summaryTestModel([]watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "alpha", now, 3*time.Hour, "code"),
+		mkFrame("b2222222222222222222222222222222", "beta", now.Add(4*time.Hour), time.Hour, "call"),
+	}, now)
+
+	const width = 60
+	c := summaryColumns(l.rows, width)
+	if c.barW == 0 {
+		t.Fatalf("60 columns must leave room for a bar, got barW 0 (labelW %d, durW %d)", c.labelW, c.durW)
+	}
+	for i, r := range l.rows {
+		if r.kind != rowDayHeader && r.kind != rowProject {
+			continue
+		}
+		line := l.renderRow(i, width, c)
+		runes := []rune(line)
+		if len(runes) < c.barW {
+			t.Errorf("row %d is shorter than its bar: %q", i, line)
+			continue
+		}
+		for _, ch := range runes[len(runes)-c.barW:] {
+			if !strings.ContainsRune(barGlyphs, ch) {
+				t.Errorf("row %d does not end in a full bar: %q", i, line)
+				break
+			}
+		}
+	}
+}
+
+// TestSummaryTagRowsCarryNoBar: tags are counted individually, so a frame with two
+// of them counts under both. Their bars would together outrun the project's and
+// claim a division that is not there.
+func TestSummaryTagRowsCarryNoBar(t *testing.T) {
+	now := time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local)
+	l := summaryTestModel([]watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "alpha", now, 3*time.Hour, "code", "review"),
+	}, now)
+
+	c := summaryColumns(l.rows, 60)
+	for i, r := range l.rows {
+		if r.kind != rowTag {
+			continue
+		}
+		line := l.renderRow(i, 60, c)
+		if strings.ContainsAny(line, barGlyphs) {
+			t.Errorf("tag row %d carries a bar: %q", i, line)
+		}
+		if !strings.HasSuffix(line, formatDuration(r.total)) {
+			t.Errorf("tag row %d does not end in its number: %q", i, line)
+		}
+	}
+}
+
+// TestSummaryCursorTakesTheRailColumn: the marker sits in the rail's own column,
+// not in front of it. That the line keeps its width as a result is asserted by
+// TestSummaryCursorDoesNotMoveTheNumbers; this pins where the marker goes.
+func TestSummaryCursorTakesTheRailColumn(t *testing.T) {
+	now := time.Date(2026, 7, 20, 9, 0, 0, 0, time.Local)
+	l := summaryTestModel([]watson.Frame{
+		mkFrame("a1111111111111111111111111111111", "alpha", now, 3*time.Hour, "code"),
+	}, now)
+	l.cursor = 1 // the project row
+
+	c := summaryColumns(l.rows, 60)
+	line := l.renderRow(1, 60, c)
+	if got := string([]rune(line)[0]); got != selectionMarker {
+		t.Errorf("the cursor row opens with %q, want %q", got, selectionMarker)
 	}
 }
