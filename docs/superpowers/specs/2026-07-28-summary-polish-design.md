@@ -146,6 +146,24 @@ Zwei Kollisionen und wie sie ausgehen:
   Projektbalken darüber und würden eine Aufteilung behaupten, die es nicht
   gibt.
 
+**`summaryBar` liefert reinen Text, gefüllten Teil und Track getrennt** —
+`(filled, track string)`. Die Farbe setzt erst `renderRow`. Die Zeile besteht
+sonst aus drei verschieden gefärbten Abschnitten, und dann rechnet jede Breite,
+die über den zusammengesetzten String läuft, Escape-Bytes als Spalten mit: die
+Zeile wird zu lang, `panel` schneidet sie mit `lipgloss.Width` ab, dabei fällt
+die Reset-Sequenz weg und die Farbe blutet über den Rest des Bildschirms. Genau
+davor warnt der Kommentar an `reportRow`. Regel: **jede Breitenrechnung
+passiert auf dem unformatierten Text, vor dem ersten `Render`.**
+
+**Die Balkenbreite hängt am längsten Namen der Ansicht.** Erst wird die
+Labelspalte aus den Daten bemessen und gegen die Breite gekappt, dann die
+Zahlenspalte, dann bekommt der Balken den Rest. Auf einem breiten Terminal mit
+sehr langen Projektnamen kann der Balken deshalb wegfallen, obwohl Platz frei
+wirkt. Das ist gewollt und nicht umgekehrt gelöst: der Name ist die
+Information, der Balken die Zugabe — `46d97d1` hat diese Rangfolge gesetzt, und
+ein Balken, der Namen kürzt, dreht sie um. Bei 100 Spalten müsste die
+Labelspalte über 79 Spalten breit werden, damit das eintritt.
+
 ### Farben
 
 Alles bleibt in ANSI 0–15, damit die Oberfläche weiter das Terminal-Thema
@@ -235,6 +253,15 @@ Alles Übrige bleibt unberührt: das ISO-Datum, die sichtbaren leeren Tage mit
 - `summaryRail`: `╭` auf der Tageszeile, `│` innen, `╰` auf der letzten Zeile
   des Tages — auch wenn das letzte Projekt keine Tags trägt; kein Zeichen auf
   einem leeren Tag.
+- `summaryRail` mit einem Filter, der einen Tag **mitten im Zeitraum** leer
+  macht: Woche, Filter trifft nur Montag und Mittwoch. Erwartet Montag `╭…╰`,
+  Dienstag ohne Rail, Mittwoch `╭…╰`, Donnerstag bis Sonntag ohne Rail und ohne
+  Leerzeilen zwischen sich. Der Fall unterscheidet sich von einem Zeitraum, in
+  dem die leeren Tage am Ende liegen, und ist der einzige, in dem eine
+  Tageszeile ohne Rail zwischen zwei Blöcken steht.
+- Keine Zeile enthält eine Escape-Sequenz, bevor ihre Breite gerechnet ist:
+  `lipgloss.Width` der fertigen Zeile ist gleich der Summe der Spalten, die die
+  Layoutfunktionen zugeteilt haben.
 - `summaryBar`: Achtel runden richtig; jede Dauer über 0 ergibt mindestens
   `▏`; der stärkste Tag füllt die Breite; Track füllt genau auf die Breite auf;
   Bezugsgröße 0 ergibt keinen Balken.
@@ -250,6 +277,11 @@ Alles Übrige bleibt unberührt: das ISO-Datum, die sichtbaren leeren Tage mit
 - Die Golden-Datei der Zusammenfassung bei 100×30 wird neu erzeugt.
 - Ansehen bei 100, 80, 60 und 40 Spalten: der Balken verschwindet, statt
   falsche Verhältnisse zu zeigen.
+- **Im echten Terminal ansehen, nicht nur im Test.** Die Entwürfe zu diesem
+  Spec sind gerechnet, nicht gerendert. `░` (U+2591) ist ein Schattierungs-, kein
+  Blockelement und fällt in Terminal-Schriften unterschiedlicher aus als die
+  Achtelblöcke. Liest es sich nicht als Track, ist der Ersatz ein gedimmtes `█`
+  oder `·` — die Bedeutung bleibt, nur das Zeichen wechselt.
 
 ## Non-Goals
 
