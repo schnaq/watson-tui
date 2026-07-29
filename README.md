@@ -4,6 +4,8 @@ A lean terminal UI for [Watson](https://jazzband.github.io/Watson/) time
 tracking, in Go. It reads and writes Watson's data format directly — you do not
 need Watson installed, and existing data keeps working as it is.
 
+<img src="public/summary.webp" alt="watson-tui summary view: one block per day, projects and tags underneath, each measured against the strongest day of the week" width="760">
+
 ## Installation
 
 ```sh
@@ -26,6 +28,8 @@ day, the projects worked on that day and, under each, its tags — days and
 projects with a bar for how they measure against the strongest day of the
 period. That is the question one opens a time tracker with. The individual
 sessions are one key away: `f` switches to the frame list and back.
+
+<img src="public/frames.webp" alt="watson-tui frame list: individual sessions for the week, with start/stop times, project, tags and ID" width="760">
 
 | Key | Action |
 |---|---|
@@ -57,6 +61,11 @@ shows recorded frames, so its total leaves a running timer out and writes
 for the same period. The summary's day blocks count a running timer up to now,
 like the report, so its total counts it too and carries no such flag.
 
+`a` drops the period entirely and lists every recorded frame, unbounded — the
+whole history in one view:
+
+<img src="public/all-frames.webp" alt="watson-tui frame list with the period set to 'all frames': every recorded frame across all projects, plus the running timer" width="760">
+
 The interface uses your terminal theme's ANSI colours: context header on top,
 framed main panel, key hints at the bottom. The chrome hands its space back to
 the list in four steps: from 24 terminal lines the header is framed and shows
@@ -78,6 +87,8 @@ would match several frames — or the wrong one. You always get the full ID in t
 edit dialog (`enter`) and in the delete prompt (`d`). The exact thresholds
 depend on the widest duration in the list — `130h 00m` needs one column more
 than `6h 30m`.
+
+<img src="public/edit.webp" alt="watson-tui's frame edit form: project, start, stop and tags, with tab-completion suggestions" width="760">
 
 The summary reads down three columns: a rail that brackets each day, the names
 with their durations, and a bar.
@@ -139,6 +150,8 @@ terminal width: below about 78 columns the month column titles are shortened
 Below about 62 columns whole value columns drop out — which ones is printed
 above the table, and `all` always stays. No duration is ever cut off.
 
+<img src="public/billing.webp" alt="watson-tui billing overview: totals per project across this week, last week, this month, last month and all" width="760">
+
 **How time is attributed to a period** — this matters if you write invoices
 from it:
 
@@ -158,6 +171,14 @@ from it:
 ```sh
 go test ./...
 WATSON_DIR=$(mktemp -d) go run ./cmd/watson-tui
+```
+
+To reproduce screenshots like the ones above without touching real tracked
+time, generate a throwaway data directory and point `--dir` at it:
+
+```sh
+go run scripts/gen-demo-data.go   # writes ./demo-data
+go run ./cmd/watson-tui --dir demo-data
 ```
 
 Releases: push a `v*` git tag — GitHub Actions builds with GoReleaser and

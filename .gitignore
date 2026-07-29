@@ -2,3 +2,4 @@
 /dist/
 *.test
 /demo-data/
+.DS_Store
