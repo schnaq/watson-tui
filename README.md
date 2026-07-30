@@ -174,6 +174,9 @@ from it:
 
 ## Development
 
+See [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) (governed by the
+[Code of Conduct](docs/CODE_OF_CONDUCT.md)).
+
 ```sh
 go test ./...
 WATSON_DIR=$(mktemp -d) go run ./cmd/watson-tui
