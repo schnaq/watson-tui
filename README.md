@@ -1,5 +1,11 @@
 # watson-tui
 
+```
+╭ watson-tui           ████████████████████████
+│   time, tracked      ██████████████▊░░░░░░░░░
+╰   in Go              █████████▎░░░░░░░░░░░░░░
+```
+
 A lean terminal UI for [Watson](https://jazzband.github.io/Watson/) time
 tracking, in Go. It reads and writes Watson's data format directly — you do not
 need Watson installed, and existing data keeps working as it is.
