@@ -193,3 +193,7 @@ go run ./cmd/watson-tui --dir demo-data
 Releases: push a `v*` git tag — GitHub Actions builds with GoReleaser and
 updates the Homebrew cask in
 [schnaq/homebrew-tap](https://github.com/schnaq/homebrew-tap).
+
+---
+
+Built by [schnaq GmbH](https://schnaq.com).
