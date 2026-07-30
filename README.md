@@ -1,5 +1,11 @@
 # watson-tui
 
+```
+╭ watson-tui           ████████████████████████
+│   time, tracked      ██████████████▊░░░░░░░░░
+╰   in Go              █████████▎░░░░░░░░░░░░░░
+```
+
 A lean terminal UI for [Watson](https://jazzband.github.io/Watson/) time
 tracking, in Go. It reads and writes Watson's data format directly — you do not
 need Watson installed, and existing data keeps working as it is.
@@ -168,6 +174,9 @@ from it:
 
 ## Development
 
+See [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) (governed by the
+[Code of Conduct](docs/CODE_OF_CONDUCT.md)).
+
 ```sh
 go test ./...
 WATSON_DIR=$(mktemp -d) go run ./cmd/watson-tui
@@ -184,3 +193,19 @@ go run ./cmd/watson-tui --dir demo-data
 Releases: push a `v*` git tag — GitHub Actions builds with GoReleaser and
 updates the Homebrew cask in
 [schnaq/homebrew-tap](https://github.com/schnaq/homebrew-tap).
+
+---
+
+<p align="center">
+  <a href="https://schnaq.com">
+    <img src="public/schnaq.webp" alt="schnaq" width="220">
+  </a>
+</p>
+
+<p align="center">
+  <sub>
+    watson-tui started as an internal tool for tracking our own time at
+    <a href="https://schnaq.com">schnaq</a> — we open-sourced it because a
+    terminal-first Watson client didn't otherwise exist.
+  </sub>
+</p>

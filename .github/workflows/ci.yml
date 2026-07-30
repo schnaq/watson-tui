@@ -6,8 +6,8 @@ on:
   pull_request:
 
 # Pull requests may carry code from forks, so they must not run on the
-# self-hosted runners: a workflow from a stranger's branch would execute on
-# gimli. Nothing here needs those machines — build, vet, test and lint are
+# self-hosted runners: a workflow from a stranger's branch would execute
+# there. Nothing here needs those machines — build, vet, test and lint are
 # plain Go. Pushes to main are already reviewed and stay on self-hosted, and
 # the release workflow builds on self-hosted as intended.
 
