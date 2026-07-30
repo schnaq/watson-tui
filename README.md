@@ -196,4 +196,6 @@ updates the Homebrew cask in
 
 ---
 
+<a href="https://schnaq.com"><img src="public/schnaq.webp" alt="schnaq" width="120"></a>
+
 Built by [schnaq GmbH](https://schnaq.com).
