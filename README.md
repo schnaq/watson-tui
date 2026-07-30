@@ -196,6 +196,16 @@ updates the Homebrew cask in
 
 ---
 
-<a href="https://schnaq.com"><img src="public/schnaq.webp" alt="schnaq" width="120"></a>
+<p align="center">
+  <a href="https://schnaq.com">
+    <img src="public/schnaq.webp" alt="schnaq" width="220">
+  </a>
+</p>
 
-Built by [schnaq GmbH](https://schnaq.com).
+<p align="center">
+  <sub>
+    watson-tui started as an internal tool for tracking our own time at
+    <a href="https://schnaq.com">schnaq</a> — we open-sourced it because a
+    terminal-first Watson client didn't otherwise exist.
+  </sub>
+</p>
